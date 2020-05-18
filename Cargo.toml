@@ -1,0 +1,17 @@
+[package]
+name = "cargo-watt"
+version = "0.1.0"
+authors = ["Jakob Hellermann <jakob.hellermann@protonmail.com>"]
+edition = "2018"
+
+[dependencies]
+clap = "3.0.0-beta.1"
+anyhow = "1.0.31"
+walkdir = "2.3.1"
+toml = "0.5.6"
+cargo_toml = "0.8.0"
+regex = "1.3.7"
+once_cell = "1.4.0"
+syn = { version = "1.0.22", features = ["extra-traits"] }
+quote = "1.0.6"
+proc-macro2 = "1.0.13"
