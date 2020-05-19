@@ -1,5 +1,19 @@
+use anyhow::Context;
 use std::path::Path;
 use walkdir::WalkDir;
+
+pub fn parse_validate_toml(path: &Path) -> Result<cargo_toml::Manifest, anyhow::Error> {
+    let toml = std::fs::read(path).context("failed to read Cargo.toml")?;
+    let manifest = cargo_toml::Manifest::from_slice(&toml)?;
+    anyhow::ensure!(manifest.package.is_some(), "Cargo.toml has no package");
+    anyhow::ensure!(manifest.lib.is_some(), "Cargo.toml has no lib");
+    anyhow::ensure!(
+        manifest.lib.as_ref().unwrap().proc_macro,
+        "crate is not a proc macro"
+    );
+
+    Ok(manifest)
+}
 
 pub fn copy_all(from: &Path, to: &Path) -> Result<(), anyhow::Error> {
     anyhow::ensure!(from.is_dir(), "from path should be a directory");
@@ -12,7 +26,7 @@ pub fn copy_all(from: &Path, to: &Path) -> Result<(), anyhow::Error> {
         let entry = file?;
         let file_type = entry.file_type();
 
-        if file_type.is_symlink() || entry.path().components().any(|c| c.as_os_str() == ".git") {
+        if file_type.is_symlink() {
             continue;
         }
 

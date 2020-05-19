@@ -1,4 +1,19 @@
 use crate::utils;
+use std::path::Path;
+
+pub fn make_modifications(path: &Path) -> Result<(), anyhow::Error> {
+    let toml_path = path.join("Cargo.toml");
+    let toml = std::fs::read_to_string(&toml_path)?;
+    let new_toml = cargo_toml(&toml)?;
+    std::fs::write(toml_path, new_toml)?;
+
+    let lib_path = path.join("src").join("lib.rs");
+    let lib = std::fs::read_to_string(&lib_path)?;
+    let new_lib = librs(&lib)?;
+    std::fs::write(lib_path, new_lib)?;
+
+    Ok(())
+}
 
 pub fn cargo_toml(input: &str) -> Result<String, anyhow::Error> {
     /*let mut manifest = cargo_toml::Manifest::from_str(input)?;
