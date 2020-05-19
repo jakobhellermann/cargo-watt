@@ -2,7 +2,9 @@ mod modifications;
 mod utils;
 
 use anyhow::Context;
+use cargo_toml::Manifest;
 use clap::Clap;
+use modifications::ProcMacroFn;
 use std::{path::PathBuf, process::Command};
 
 #[derive(Debug, Clap)]
@@ -15,22 +17,25 @@ fn main() -> Result<(), anyhow::Error> {
     let options = Options::parse();
     let manifest = utils::parse_validate_toml(&options.path.join("Cargo.toml"))?;
 
-    let wasm = build_wasm(&options, &manifest)?;
+    let (fns, wasm) = build_wasm(&options, &manifest)?;
     println!("{}kb", wasm.len() / 1024);
+
+    create_watt_crate(&manifest, &wasm, fns)?;
 
     Ok(())
 }
 
 fn build_wasm(
     options: &Options,
-    manifest: &cargo_toml::Manifest,
-) -> Result<Vec<u8>, anyhow::Error> {
+    manifest: &Manifest,
+) -> Result<(Vec<ProcMacroFn>, Vec<u8>), anyhow::Error> {
     let name = manifest.package.as_ref().unwrap().name.as_str();
 
     let tempdir = std::env::temp_dir().join(name);
     utils::copy_all(&options.path, &tempdir).context("failed to copy to tmp dir")?;
 
-    modifications::make_modifications(&tempdir).context("failed to make modifications to crate")?;
+    let fns = modifications::make_modifications(&tempdir)
+        .context("failed to make modifications to crate")?;
 
     let status = Command::new("/home/jakob/.cargo/bin/cargo")
         .args(&["build", "--target", "wasm32-unknown-unknown", "--release"])
@@ -50,5 +55,47 @@ fn build_wasm(
 
     std::fs::remove_dir_all(tempdir)?;
 
-    Ok(wasm)
+    Ok((fns, wasm))
+}
+
+fn create_watt_crate(
+    manifest: &Manifest,
+    wasm: &[u8],
+    fns: Vec<ProcMacroFn>,
+) -> Result<(), anyhow::Error> {
+    let name = manifest.package.as_ref().unwrap().name.as_str();
+    let crate_path = PathBuf::from(format!("{}-watt", name));
+    let src_path = crate_path.join("src");
+
+    std::fs::create_dir_all(&src_path)?;
+
+    std::fs::write(src_path.join(name).with_extension("wasm"), wasm)?;
+    std::fs::write(
+        crate_path.join("Cargo.toml"),
+        format!(
+            r#"[package]
+name = "{}-watt"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+watt = "0.3""#,
+            name,
+        ),
+    )?;
+
+    let file_name = format!("{}.wasm", &name);
+    let lib = quote::quote! {
+        static MACRO: watt::WasmMacro = watt::WasmMacro::new(WASM);
+        static WASM: &[u8] = include_bytes!(#file_name);
+
+        #(#fns)*
+
+    };
+    std::fs::write(src_path.join("lib.rs"), lib.to_string())?;
+
+    Ok(())
 }

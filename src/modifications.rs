@@ -1,7 +1,7 @@
 use crate::utils;
 use std::path::Path;
 
-pub fn make_modifications(path: &Path) -> Result<(), anyhow::Error> {
+pub fn make_modifications(path: &Path) -> Result<Vec<ProcMacroFn>, anyhow::Error> {
     let toml_path = path.join("Cargo.toml");
     let toml = std::fs::read_to_string(&toml_path)?;
     let new_toml = cargo_toml(&toml)?;
@@ -9,10 +9,10 @@ pub fn make_modifications(path: &Path) -> Result<(), anyhow::Error> {
 
     let lib_path = path.join("src").join("lib.rs");
     let lib = std::fs::read_to_string(&lib_path)?;
-    let new_lib = librs(&lib)?;
+    let (fns, new_lib) = librs(&lib)?;
     std::fs::write(lib_path, new_lib)?;
 
-    Ok(())
+    Ok(fns)
 }
 
 pub fn cargo_toml(input: &str) -> Result<String, anyhow::Error> {
@@ -43,8 +43,35 @@ pub fn cargo_toml(input: &str) -> Result<String, anyhow::Error> {
     Ok(toml)
 }
 
-pub fn librs(input: &str) -> Result<String, anyhow::Error> {
+pub struct ProcMacroFn {
+    pub name: syn::Ident,
+    pub attrs: Vec<syn::Attribute>,
+}
+impl quote::ToTokens for ProcMacroFn {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let ident = &self.name;
+        let mut new_fn: syn::ItemFn = syn::parse_quote! {
+            pub fn #ident(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+                MACRO.proc_macro(stringify!(#ident), input)
+            }
+        };
+        new_fn.attrs = self.attrs.clone();
+        tokens.extend(quote::quote! { #new_fn });
+    }
+}
+
+pub fn librs(input: &str) -> Result<(Vec<ProcMacroFn>, String), anyhow::Error> {
     let mut parsed = syn::parse_str::<syn::File>(input)?;
+
+    parsed.attrs = utils::parse_attributes(quote::quote!(#[allow(warnings)]))?;
+    parsed
+        .attrs
+        .iter_mut()
+        .for_each(|attr| attr.style = syn::AttrStyle::Inner(syn::parse_quote!(!)));
+
+    let c_abi: syn::Abi = syn::parse_quote!(extern "C");
+    let no_mangle = utils::parse_attributes(quote::quote!(#[no_mangle]))?;
+
     let proc_macro_fns = parsed
         .items
         .iter_mut()
@@ -52,59 +79,44 @@ pub fn librs(input: &str) -> Result<String, anyhow::Error> {
             syn::Item::Fn(item_fn) => Some(item_fn),
             _ => None,
         })
-        .filter_map(|item_fn| {
-            let meta = item_fn
-                .attrs
-                .iter()
-                .filter_map(|attr| attr.parse_meta().ok())
-                .filter(|meta| match meta {
-                    syn::Meta::Path(p) => {
-                        p.get_ident().map_or(false, |ident| ident == "proc_macro")
-                    }
-                    _ => false,
-                })
-                .next()?;
+        .filter(|item| is_proc_macro(item));
 
-            Some((item_fn, meta))
+    let mut fns = Vec::new();
+    for f in proc_macro_fns {
+        let old_attrs = std::mem::replace(&mut f.attrs, no_mangle.clone());
+        f.sig.abi = Some(c_abi.clone());
+        rename_tokenstream(&mut f.sig);
+
+        fns.push(ProcMacroFn {
+            name: f.sig.ident.clone(),
+            attrs: old_attrs,
         });
-
-    let c_abi: syn::Abi = syn::parse2(quote::quote!(extern "C"))?;
-    let no_mangle = utils::parse_attributes(quote::quote!(#[no_mangle]))?;
-
-    let mut new_fns = Vec::new();
-    for (f, _meta) in proc_macro_fns {
-        let first_arg = utils::first_ident_parameter(f);
-
-        let fn_name_inner = syn::Ident::new(
-            &format!("{}_inner", f.sig.ident.to_string()),
-            proc_macro2::Span::call_site(),
-        );
-
-        let new_block: syn::Block = syn::parse2(quote::quote! { {
-            #fn_name_inner(#first_arg.into()).into()
-        }})?;
-
-        let mut sig = f.sig.clone();
-        let _old_attrs = std::mem::replace(&mut f.attrs, Vec::new());
-        let vis = std::mem::replace(&mut f.vis, syn::Visibility::Inherited);
-
-        f.sig.ident = fn_name_inner;
-
-        sig.abi = Some(c_abi.clone());
-
-        let new_fn = syn::Item::Fn(syn::ItemFn {
-            attrs: no_mangle.clone(),
-            vis,
-            sig,
-            block: Box::new(new_block),
-        });
-
-        new_fns.push(new_fn);
     }
 
-    for new_fn in new_fns {
-        parsed.items.push(new_fn);
+    Ok((fns, quote::quote!(#parsed).to_string()))
+}
+
+fn is_proc_macro(item: &syn::ItemFn) -> bool {
+    let mut attr_metas = item
+        .attrs
+        .iter()
+        .filter_map(|attr| attr.parse_meta().ok())
+        .filter(|meta| match meta {
+            syn::Meta::Path(p) => p.get_ident().map_or(false, |ident| ident == "proc_macro"),
+            _ => false,
+        });
+
+    attr_metas.next().is_some()
+}
+
+fn rename_tokenstream(sig: &mut syn::Signature) {
+    let token_stream: syn::Type = syn::parse_quote!(proc_macro2::TokenStream);
+
+    for input in &mut sig.inputs {
+        if let syn::FnArg::Typed(pat_type) = input {
+            pat_type.ty = Box::new(token_stream.clone());
+        }
     }
 
-    Ok(quote::quote!(#parsed).to_string())
+    sig.output = syn::ReturnType::Type(syn::parse_quote!(->), Box::new(token_stream));
 }

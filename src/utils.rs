@@ -58,18 +58,3 @@ pub fn parse_attributes(
     let AttrParser(attrs) = syn::parse2(token_stream)?;
     Ok(attrs)
 }
-
-pub fn first_ident_parameter(f: &syn::ItemFn) -> Option<&syn::Ident> {
-    f.sig
-        .inputs
-        .iter()
-        .filter_map(|fn_arg| match fn_arg {
-            syn::FnArg::Typed(t) => Some(t),
-            _ => None,
-        })
-        .filter_map(|pat_type| match pat_type.pat.as_ref() {
-            syn::Pat::Ident(ident) => Some(&ident.ident),
-            _ => None,
-        })
-        .next()
-}
