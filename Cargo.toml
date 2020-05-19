@@ -13,3 +13,6 @@ cargo_toml = "0.8.0"
 syn = { version = "1.0.22", features = ["extra-traits"] }
 quote = "1.0.6"
 proc-macro2 = "1.0.13"
+pretty_env_logger = "0.4.0"
+env_logger = "0.7.1"
+log = "0.4.8"

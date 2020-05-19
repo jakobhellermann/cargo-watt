@@ -15,6 +15,8 @@ pub fn make_modifications(path: &Path) -> Result<Vec<ProcMacroFn>, anyhow::Error
     Ok(fns)
 }
 
+/// changes `proc-macro = true` to `crate-type = ["cdylib"]`
+/// adds a patch for proc-macro2 to point to dtolnay's watt crate.
 pub fn cargo_toml(input: &str) -> Result<String, anyhow::Error> {
     /*let mut manifest = cargo_toml::Manifest::from_str(input)?;
     if let Some(lib) = &mut manifest.lib {
@@ -79,31 +81,23 @@ impl quote::ToTokens for ProcMacroFn {
 }
 
 pub fn librs(input: &str) -> Result<(Vec<ProcMacroFn>, String), anyhow::Error> {
-    let mut parsed = syn::parse_str::<syn::File>(input)?;
-
-    parsed.attrs = utils::parse_attributes(quote::quote!(#[allow(warnings)]))?;
-    parsed
-        .attrs
-        .iter_mut()
-        .for_each(|attr| attr.style = syn::AttrStyle::Inner(syn::parse_quote!(!)));
+    let mut file = syn::parse_str::<syn::File>(input)?;
+    insert_allow_warnings(&mut file);
 
     let c_abi: syn::Abi = syn::parse_quote!(extern "C");
     let no_mangle = utils::parse_attributes(quote::quote!(#[no_mangle]))?;
 
-    let proc_macro_fns = parsed
-        .items
-        .iter_mut()
-        .filter_map(|item| match item {
-            syn::Item::Fn(item_fn) => Some(item_fn),
-            _ => None,
-        })
-        .filter_map(|item| match macro_kind(item) {
-            Some(kind) => Some((item, kind)),
-            _ => None,
-        });
-
     let mut fns = Vec::new();
-    for (f, kind) in proc_macro_fns {
+    for (f, kind) in proc_macro_fns(&mut file) {
+        // #[proc_macro]
+        // pub fn my_macro(_input: TokenStream) -> proc_macro::TokenStream {
+        //     ...
+        // }
+        // -->
+        // #[no_mangle]
+        // pub extern "C" fn my_macro(_input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+        //    ...
+        // }
         let old_attrs = std::mem::replace(&mut f.attrs, no_mangle.clone());
         f.sig.abi = Some(c_abi.clone());
         rename_tokenstream(&mut f.sig);
@@ -115,7 +109,30 @@ pub fn librs(input: &str) -> Result<(Vec<ProcMacroFn>, String), anyhow::Error> {
         });
     }
 
-    Ok((fns, quote::quote!(#parsed).to_string()))
+    Ok((fns, quote::quote!(#file).to_string()))
+}
+
+fn proc_macro_fns(file: &mut syn::File) -> impl Iterator<Item = (&mut syn::ItemFn, ProcMacroKind)> {
+    file.items
+        .iter_mut()
+        .filter_map(|item| match item {
+            syn::Item::Fn(item_fn) => Some(item_fn),
+            _ => None,
+        })
+        .filter_map(|item| match macro_kind(item) {
+            Some(kind) => Some((item, kind)),
+            _ => None,
+        })
+}
+
+fn insert_allow_warnings(file: &mut syn::File) {
+    let mut allow_warnings = utils::parse_attributes(quote::quote!(#[allow(warnings)]))
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap();
+    allow_warnings.style = syn::AttrStyle::Inner(syn::parse_quote!(!));
+    file.attrs.push(allow_warnings);
 }
 
 fn macro_kind(item: &syn::ItemFn) -> Option<ProcMacroKind> {

@@ -13,18 +13,33 @@ struct Options {
     path: PathBuf,
 }
 
-fn main() -> Result<(), anyhow::Error> {
+fn main() {
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "cargo_watt=info");
+    }
+    pretty_env_logger::init();
+
     let options = Options::parse();
+    if let Err(e) = run(options) {
+        log::error!("{:?}", e);
+        std::process::exit(1);
+    }
+}
+
+fn run(options: Options) -> Result<(), anyhow::Error> {
     let manifest = utils::parse_validate_toml(&options.path.join("Cargo.toml"))?;
 
     let (fns, wasm) = build_wasm(&options, &manifest)?;
-    println!("{}kb", wasm.len() / 1024);
+    log::info!("compiled wasm file is {}mb large", wasm.len() / 1024 / 1024);
 
     create_watt_crate(&manifest, &wasm, fns)?;
 
     Ok(())
 }
 
+/// First `build_wasm` copies the crate into /tmp/$crate_name so that I dont fuck something up.
+/// Then modify Cargo.toml (proc-macro2 patch, cdylib) and lib.rs (see modifications::librs).
+/// Next call cargo build --release --target wasm32-unknown-unknown and read to compiled wasm file.
 fn build_wasm(
     options: &Options,
     manifest: &Manifest,
@@ -37,11 +52,14 @@ fn build_wasm(
     let fns = modifications::make_modifications(&tempdir)
         .context("failed to make modifications to crate")?;
 
-    let status = Command::new("/home/jakob/.cargo/bin/cargo")
+    log::info!("begin compiling crate...");
+    let instant = std::time::Instant::now();
+    let status = Command::new("cargo")
         .args(&["build", "--target", "wasm32-unknown-unknown", "--release"])
         .current_dir(&tempdir)
         .status()
         .context("failed to run cargo build")?;
+    log::info!("finished in {:.1}s", instant.elapsed().as_secs_f32());
     anyhow::ensure!(status.success(), "cargo failed");
 
     let wasm_path = std::env::var("CARGO_TARGET_DIR")
@@ -93,9 +111,10 @@ watt = "0.3""#,
         static WASM: &[u8] = include_bytes!(#file_name);
 
         #(#fns)*
-
     };
     std::fs::write(src_path.join("lib.rs"), lib.to_string())?;
+
+    log::info!("generated crate in {:?}", crate_path);
 
     Ok(())
 }
