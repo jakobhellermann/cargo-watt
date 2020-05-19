@@ -1,0 +1,9 @@
+[package]
+name = "user"
+version = "0.1.0"
+authors = ["Jakob Hellermann <jakob.hellermann@protonmail.com>"]
+edition = "2018"
+
+[dependencies]
+# macro-test = { path = ".." }
+macro-test-watt = { path = "../../macro-test-watt" }
