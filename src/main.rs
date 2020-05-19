@@ -55,7 +55,7 @@ fn main() -> Result<(), anyhow::Error> {
 fn make_modifications(path: &Path) -> Result<(), anyhow::Error> {
     let toml_path = path.join("Cargo.toml");
     let toml = std::fs::read_to_string(&toml_path)?;
-    let new_toml = modifications::cargo_toml(&toml);
+    let new_toml = modifications::cargo_toml(&toml)?;
     std::fs::write(toml_path, new_toml)?;
 
     let lib_path = path.join("src").join("lib.rs");

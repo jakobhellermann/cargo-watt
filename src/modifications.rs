@@ -1,11 +1,31 @@
 use crate::utils;
 
-pub fn cargo_toml(input: &str) -> String {
+pub fn cargo_toml(input: &str) -> Result<String, anyhow::Error> {
+    /*let mut manifest = cargo_toml::Manifest::from_str(input)?;
+    if let Some(lib) = &mut manifest.lib {
+        lib.proc_macro = false;
+        lib.crate_type = vec!["cdylib".to_string()];
+    }
+    manifest
+        .patch
+        .entry("crates-io".into())
+        .or_default()
+        .insert(
+            "proc-macro2".into(),
+            cargo_toml::Dependency::Detailed(cargo_toml::DependencyDetail {
+                git: Some("https://github.com/dtolnay/watt".into()),
+                ..Default::default()
+            }),
+        );
+
+    let toml = toml::to_string(&manifest)?;*/
+
     let mut toml = input.replace("proc-macro = true", "crate-type = [\"cdylib\"]");
     toml.push_str(
         "\n[patch.crates-io]\nproc-macro2 = { git = \"https://github.com/dtolnay/watt\" }",
     );
-    toml
+
+    Ok(toml)
 }
 
 pub fn librs(input: &str) -> Result<String, anyhow::Error> {
