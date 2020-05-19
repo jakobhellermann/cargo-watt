@@ -46,14 +46,32 @@ pub fn cargo_toml(input: &str) -> Result<String, anyhow::Error> {
 pub struct ProcMacroFn {
     pub name: syn::Ident,
     pub attrs: Vec<syn::Attribute>,
+    pub kind: ProcMacroKind,
+}
+pub enum ProcMacroKind {
+    Macro,
+    Derive,
+    Attribute,
 }
 impl quote::ToTokens for ProcMacroFn {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let ident = &self.name;
-        let mut new_fn: syn::ItemFn = syn::parse_quote! {
-            pub fn #ident(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-                MACRO.proc_macro(stringify!(#ident), input)
-            }
+        let mut new_fn: syn::ItemFn = match self.kind {
+            ProcMacroKind::Macro => syn::parse_quote! {
+                pub fn #ident(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+                    MACRO.proc_macro(stringify!(#ident), input)
+                }
+            },
+            ProcMacroKind::Derive => syn::parse_quote! {
+                pub fn #ident(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+                    MACRO.proc_macro_derive(stringify!(#ident), input)
+                }
+            },
+            ProcMacroKind::Attribute => syn::parse_quote! {
+                pub fn #ident(args: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+                    MACRO.proc_macro_attribute(stringify!(#ident), args, input)
+                }
+            },
         };
         new_fn.attrs = self.attrs.clone();
         tokens.extend(quote::quote! { #new_fn });
@@ -79,10 +97,13 @@ pub fn librs(input: &str) -> Result<(Vec<ProcMacroFn>, String), anyhow::Error> {
             syn::Item::Fn(item_fn) => Some(item_fn),
             _ => None,
         })
-        .filter(|item| is_proc_macro(item));
+        .filter_map(|item| match macro_kind(item) {
+            Some(kind) => Some((item, kind)),
+            _ => None,
+        });
 
     let mut fns = Vec::new();
-    for f in proc_macro_fns {
+    for (f, kind) in proc_macro_fns {
         let old_attrs = std::mem::replace(&mut f.attrs, no_mangle.clone());
         f.sig.abi = Some(c_abi.clone());
         rename_tokenstream(&mut f.sig);
@@ -90,23 +111,30 @@ pub fn librs(input: &str) -> Result<(Vec<ProcMacroFn>, String), anyhow::Error> {
         fns.push(ProcMacroFn {
             name: f.sig.ident.clone(),
             attrs: old_attrs,
+            kind,
         });
     }
 
     Ok((fns, quote::quote!(#parsed).to_string()))
 }
 
-fn is_proc_macro(item: &syn::ItemFn) -> bool {
-    let mut attr_metas = item
-        .attrs
+fn macro_kind(item: &syn::ItemFn) -> Option<ProcMacroKind> {
+    item.attrs
         .iter()
         .filter_map(|attr| attr.parse_meta().ok())
-        .filter(|meta| match meta {
-            syn::Meta::Path(p) => p.get_ident().map_or(false, |ident| ident == "proc_macro"),
-            _ => false,
-        });
-
-    attr_metas.next().is_some()
+        .filter_map(|meta| match meta {
+            syn::Meta::Path(path) => match path.get_ident() {
+                Some(ident) if ident == "proc_macro" => Some(ProcMacroKind::Macro),
+                Some(ident) if ident == "proc_macro_attribute" => Some(ProcMacroKind::Attribute),
+                _ => None,
+            },
+            syn::Meta::List(syn::MetaList { path, .. }) => match path.get_ident() {
+                Some(ident) if ident == "proc_macro_derive" => Some(ProcMacroKind::Derive),
+                _ => None,
+            },
+            _ => None,
+        })
+        .next()
 }
 
 fn rename_tokenstream(sig: &mut syn::Signature) {
