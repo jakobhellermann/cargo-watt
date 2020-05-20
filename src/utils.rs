@@ -1,14 +1,14 @@
-use anyhow::Context;
 use std::path::Path;
 use walkdir::WalkDir;
 
-pub fn parse_validate_toml(path: &Path) -> Result<cargo_toml::Manifest, anyhow::Error> {
-    let toml = std::fs::read(path).context("failed to read Cargo.toml")?;
-    let manifest = cargo_toml::Manifest::from_slice(&toml)?;
-    anyhow::ensure!(manifest.package.is_some(), "Cargo.toml has no package");
-    anyhow::ensure!(manifest.lib.is_some(), "Cargo.toml has no lib");
+pub fn parse_validate_toml(path: &Path) -> Result<toml_edit::Document, anyhow::Error> {
+    let input = std::fs::read_to_string(path)?;
+    let manifest: toml_edit::Document = input.parse()?;
+
+    anyhow::ensure!(!manifest["package"].is_none(), "Cargo.toml has no package");
+    anyhow::ensure!(!manifest["lib"].is_none(), "Cargo.toml has no lib");
     anyhow::ensure!(
-        manifest.lib.as_ref().unwrap().proc_macro,
+        manifest["lib"]["proc-macro"].as_bool().unwrap_or(false),
         "crate is not a proc macro"
     );
 

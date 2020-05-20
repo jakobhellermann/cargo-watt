@@ -2,7 +2,6 @@ mod modifications;
 mod utils;
 
 use anyhow::Context;
-use cargo_toml::Manifest;
 use clap::Clap;
 use modifications::ProcMacroFn;
 use std::{path::PathBuf, process::Command};
@@ -32,7 +31,7 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
     let (fns, wasm) = build_wasm(&options, &manifest)?;
     log::info!("compiled wasm file is {}mb large", wasm.len() / 1024 / 1024);
 
-    create_watt_crate(&manifest, &wasm, fns)?;
+    create_watt_crate(manifest, &wasm, fns)?;
 
     Ok(())
 }
@@ -42,9 +41,11 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
 /// Next call cargo build --release --target wasm32-unknown-unknown and read to compiled wasm file.
 fn build_wasm(
     options: &Options,
-    manifest: &Manifest,
+    manifest: &toml_edit::Document,
 ) -> Result<(Vec<ProcMacroFn>, Vec<u8>), anyhow::Error> {
-    let name = manifest.package.as_ref().unwrap().name.as_str();
+    let name = manifest["package"]["name"]
+        .as_str()
+        .ok_or(anyhow::anyhow!("crate has no name"))?;
 
     let tempdir = std::env::temp_dir().join(name);
     utils::copy_all(&options.path, &tempdir).context("failed to copy to tmp dir")?;
@@ -77,32 +78,30 @@ fn build_wasm(
 }
 
 fn create_watt_crate(
-    manifest: &Manifest,
+    mut manifest: toml_edit::Document,
     wasm: &[u8],
     fns: Vec<ProcMacroFn>,
 ) -> Result<(), anyhow::Error> {
-    let name = manifest.package.as_ref().unwrap().name.as_str();
+    let name = manifest["package"]["name"].as_str().unwrap().to_string();
+
     let crate_path = PathBuf::from(format!("{}-watt", name));
     let src_path = crate_path.join("src");
 
     std::fs::create_dir_all(&src_path)?;
 
-    std::fs::write(src_path.join(name).with_extension("wasm"), wasm)?;
+    std::fs::write(src_path.join(&name).with_extension("wasm"), wasm)?;
+
+    manifest.as_table_mut().remove("dependencies");
+    let mut deps = toml_edit::Table::default();
+    deps["watt"] = toml_edit::value("0.3");
+    manifest
+        .as_table_mut()
+        .entry("dependencies")
+        .or_insert(toml_edit::Item::Table(deps));
+
     std::fs::write(
         crate_path.join("Cargo.toml"),
-        format!(
-            r#"[package]
-name = "{}-watt"
-version = "0.1.0"
-edition = "2018"
-
-[lib]
-proc-macro = true
-
-[dependencies]
-watt = "0.3""#,
-            name,
-        ),
+        manifest.to_string_in_original_order(),
     )?;
 
     let file_name = format!("{}.wasm", &name);

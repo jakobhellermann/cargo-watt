@@ -6,4 +6,4 @@ edition = "2018"
 
 [dependencies]
 # macro-test = { path = ".." }
-macro-test-watt = { path = "../../macro-test-watt" }
+macro-test = { path = "../../macro-test" }

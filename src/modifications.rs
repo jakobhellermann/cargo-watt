@@ -1,5 +1,6 @@
 use crate::utils;
 use std::path::Path;
+use toml_edit::{value, Document, InlineTable, Item, Table};
 
 pub fn make_modifications(path: &Path) -> Result<Vec<ProcMacroFn>, anyhow::Error> {
     let toml_path = path.join("Cargo.toml");
@@ -15,34 +16,48 @@ pub fn make_modifications(path: &Path) -> Result<Vec<ProcMacroFn>, anyhow::Error
     Ok(fns)
 }
 
+pub fn git_dependency(dep: &str) -> InlineTable {
+    let mut table = InlineTable::default();
+    table.get_or_insert("git", dep);
+    table
+}
+
+pub fn patch(deps: &[(&str, &str)]) -> Table {
+    let mut table = Table::new();
+    table.set_implicit(true);
+
+    let crates = Table::new();
+    table.set_implicit(true);
+
+    let crates = table.entry("crates-io").or_insert(Item::Table(crates));
+    for (crate_, dep) in deps {
+        crates[crate_] = value(git_dependency(dep));
+    }
+
+    table
+}
+
 /// changes `proc-macro = true` to `crate-type = ["cdylib"]`
 /// adds a patch for proc-macro2 to point to dtolnay's watt crate.
 pub fn cargo_toml(input: &str) -> Result<String, anyhow::Error> {
-    /*let mut manifest = cargo_toml::Manifest::from_str(input)?;
-    if let Some(lib) = &mut manifest.lib {
-        lib.proc_macro = false;
-        lib.crate_type = vec!["cdylib".to_string()];
-    }
+    let mut manifest: Document = input.parse()?;
+    manifest["lib"]["proc-macro"] = value(false);
+
+    let mut cdylib = toml_edit::Array::default();
+    cdylib.push("cdylib");
+    manifest["lib"]["crate-type"] = value(cdylib);
+
+    let patch = patch(&[
+        ("proc-macro2", "https://github.com/dtolnay/watt"),
+        ("syn", "https://github.com/jakobhellermann/syn-watt"),
+    ]);
+
     manifest
-        .patch
-        .entry("crates-io".into())
-        .or_default()
-        .insert(
-            "proc-macro2".into(),
-            cargo_toml::Dependency::Detailed(cargo_toml::DependencyDetail {
-                git: Some("https://github.com/dtolnay/watt".into()),
-                ..Default::default()
-            }),
-        );
+        .as_table_mut()
+        .entry("patch")
+        .or_insert(Item::Table(patch));
 
-    let toml = toml::to_string(&manifest)?;*/
-
-    let mut toml = input.replace("proc-macro = true", "crate-type = [\"cdylib\"]");
-    toml.push_str("\n[patch.crates-io]\n");
-    toml.push_str("proc-macro2 = { git = \"https://github.com/dtolnay/watt\" }\n");
-    toml.push_str("syn = { git = \"https://github.com/jakobhellermann/syn-watt\" }");
-
-    Ok(toml)
+    Ok(manifest.to_string_in_original_order())
 }
 
 pub struct ProcMacroFn {

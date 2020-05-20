@@ -1,6 +1,7 @@
 [package]
 name = "macro-test"
-version = "0.1.0"
+version = "0.2.3"
+description = "example macro crate for cargo-watt"
 
 [lib]
 proc-macro = true
