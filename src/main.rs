@@ -10,6 +10,7 @@ use std::{
 };
 
 #[derive(Debug, Clap)]
+#[clap(setting = clap::AppSettings::ColoredHelp, bin_name = "cargo watt", about = clap::crate_description!())]
 struct Options {
     #[clap(default_value = ".")]
     path: PathBuf,
@@ -21,7 +22,10 @@ struct Options {
     #[clap(long = "crate", conflicts_with = "path", conflicts_with = "git")]
     crate_: Option<String>,
 
-    #[clap(long)]
+    #[clap(
+        long,
+        about = "don't copy files like tests or CI configuration to new crate"
+    )]
     only_copy_essential: bool,
 
     #[clap(long)]
@@ -34,7 +38,8 @@ fn main() {
     }
     pretty_env_logger::init();
 
-    let options = Options::parse();
+    let args = std::env::args().filter(|arg| arg != "watt");
+    let options = Options::parse_from(args);
     if let Err(e) = run(options) {
         log::error!("{:?}", e);
         std::process::exit(1);
@@ -59,17 +64,23 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
         #[cfg(not(feature = "crates"))]
         panic!("the crate was compiled without the 'crates' feature flag");
     } else {
+        anyhow::ensure!(
+            PathBuf::from("Cargo.toml").exists(),
+            "No Cargo.toml found. Use the --git or --crate flag if you want to use a remote crate."
+        );
         utils::copy_all(&options.path, &tempdir).context("failed to copy to tmp dir")?;
     }
 
-    let manifest = utils::parse_validate_toml(&tempdir.join("Cargo.toml"))
-        .context("failed to parse Cargo.toml")?;
+    let manifest = utils::parse_validate_toml(&tempdir.join("Cargo.toml"))?;
     let name = manifest["package"]["name"].as_str().unwrap().to_string();
     let crate_path = PathBuf::from(format!("{}-watt", name));
     match (crate_path.exists(), options.overwrite) {
-        (true, false) => anyhow::bail!("'{}' already exists. Use --overwrite to overwrite.", crate_path.display()),
+        (true, false) => anyhow::bail!(
+            "'{}' already exists. Use --overwrite to overwrite.",
+            crate_path.display()
+        ),
         (true, true) => std::fs::remove_dir_all(&crate_path)?,
-        (false, _) => {},
+        (false, _) => {}
     }
 
     let (fns, wasm) = build_wasm(&tempdir, &manifest)?;

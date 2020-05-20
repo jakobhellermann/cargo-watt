@@ -3,11 +3,10 @@ use std::{path::Path, process::Command};
 use walkdir::WalkDir;
 
 pub fn parse_validate_toml(path: &Path) -> Result<toml_edit::Document, anyhow::Error> {
-    let input = std::fs::read_to_string(path)?;
-    let manifest: toml_edit::Document = input.parse()?;
+    let input = std::fs::read_to_string(path).context("error reading Cargo.toml")?;
+    let manifest: toml_edit::Document = input.parse().context("failed to parse Cargo.toml")?;
 
     anyhow::ensure!(!manifest["package"].is_none(), "Cargo.toml has no package");
-    anyhow::ensure!(!manifest["lib"].is_none(), "Cargo.toml has no lib");
     anyhow::ensure!(
         manifest["package"]["name"].as_str().is_some(),
         "Cargo.toml has no name"
@@ -21,7 +20,7 @@ pub fn parse_validate_toml(path: &Path) -> Result<toml_edit::Document, anyhow::E
 }
 
 pub fn copy_all(from: &Path, to: &Path) -> Result<(), anyhow::Error> {
-    anyhow::ensure!(from.is_dir(), "from path should be a directory");
+    anyhow::ensure!(from.is_dir(), "'{}' is not a directory", from.display());
 
     let len = from.components().fold(0, |acc, _| acc + 1);
 
@@ -58,7 +57,7 @@ pub fn clone_git_into(path: &Path, url: &str) -> Result<(), anyhow::Error> {
         .context("cannot execute git")?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("failed to clone {}: {}", url, stderr);
+        anyhow::bail!("failed to clone {}: {}", url, stderr.trim());
     }
     Ok(())
 }
