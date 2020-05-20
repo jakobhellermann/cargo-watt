@@ -16,6 +16,10 @@ struct Options {
 
     #[clap(long, conflicts_with = "path")]
     git: Option<String>,
+
+    #[cfg_attr(not(feature = "crates"), clap(hidden = true))]
+    #[clap(long = "crate", conflicts_with = "path", conflicts_with = "git")]
+    crate_: Option<String>,
 }
 
 fn main() {
@@ -36,10 +40,17 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
     if tempdir.exists() {
         std::fs::remove_dir_all(&tempdir)?;
     }
+    std::fs::create_dir_all(&tempdir)?;
 
     if let Some(git) = &options.git {
         log::info!("git clone '{}' into temporary directory...", &git);
         utils::clone_git_into(&tempdir, git)?;
+    } else if let Some(crate_) = &options.crate_ {
+        log::info!("download crate '{}' into temporary directory...", crate_);
+        #[cfg(feature = "crates")]
+        utils::download_crate(&tempdir, crate_).context("failed to download and extract crate")?;
+        #[cfg(not(feature = "crates"))]
+        panic!("the crate was compiled without the 'crates' feature flag");
     } else {
         utils::copy_all(&options.path, &tempdir).context("failed to copy to tmp dir")?;
     }
@@ -48,7 +59,10 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
         .context("failed to parse Cargo.toml")?;
 
     let (fns, wasm) = build_wasm(&tempdir, &manifest)?;
-    log::info!("compiled wasm file is {}mb large", wasm.len() / 1024 / 1024);
+    log::info!(
+        "compiled wasm file is {:.2}mb large",
+        wasm.len() as f32 / 1024.0 / 1024.0
+    );
 
     create_watt_crate(manifest, &wasm, fns)?;
 

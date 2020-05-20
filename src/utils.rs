@@ -18,12 +18,6 @@ pub fn parse_validate_toml(path: &Path) -> Result<toml_edit::Document, anyhow::E
 
 pub fn copy_all(from: &Path, to: &Path) -> Result<(), anyhow::Error> {
     anyhow::ensure!(from.is_dir(), "from path should be a directory");
-    if to.exists() {
-        std::fs::remove_dir_all(&to)?;
-    }
-    if let Some(parent) = to.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
 
     let len = from.components().fold(0, |acc, _| acc + 1);
 
@@ -41,9 +35,9 @@ pub fn copy_all(from: &Path, to: &Path) -> Result<(), anyhow::Error> {
             .components()
             .skip(len)
             .fold(to.to_path_buf(), |acc, item| acc.join(item));
-        if file_type.is_dir() {
+        if file_type.is_dir() && !new_file.exists() {
             std::fs::create_dir(new_file)?;
-        } else {
+        } else if file_type.is_file() {
             std::fs::copy(entry.path(), new_file)?;
         }
     }
@@ -62,6 +56,59 @@ pub fn clone_git_into(path: &Path, url: &str) -> Result<(), anyhow::Error> {
         let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!("failed to clone {}: {}", url, stderr);
     }
+    Ok(())
+}
+
+#[cfg(feature = "crates")]
+pub fn download_crate(path: &Path, crate_: &str) -> Result<(), anyhow::Error> {
+    let err = |e| move || anyhow::anyhow!("invalid crates.io response: {}", e);
+
+    let response = ureq::get(&format!("https://crates.io/api/v1/crates/{}", crate_)).call();
+    anyhow::ensure!(
+        !response.error(),
+        "crates io request failed with status code {}: {}",
+        response.status(),
+        response.status_text()
+    );
+    let body = response.into_reader();
+    let api_response: serde_json::Value = serde_json::from_reader(body)?;
+
+    let versions = &api_response["versions"]
+        .as_array()
+        .ok_or_else(err("no versions"))?;
+    let dl_path = versions
+        .iter()
+        .filter(|v| !v["yanked"].as_bool().unwrap_or(false))
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("no published non-yanked versions"))?["dl_path"]
+        .as_str()
+        .ok_or_else(err("missing dl_path"))?;
+
+    let crate_response = ureq::get(&format!("https://crates.io{}", dl_path)).call();
+
+    anyhow::ensure!(
+        !crate_response.error(),
+        "crates io request failed with status code {}: {}",
+        crate_response.status(),
+        crate_response.status_text()
+    );
+
+    let tar = flate2::read::GzDecoder::new(crate_response.into_reader());
+    let mut archive = tar::Archive::new(tar);
+    archive.unpack(path)?;
+
+    for file in std::fs::read_dir(path)? {
+        let inner_path = file?.path();
+        copy_all(&inner_path, path)?;
+        std::fs::remove_dir_all(&inner_path)?;
+    }
+
+    // if we don't delete Cargo.lock, the #[patch] will not be used
+    let lock = path.join("Cargo.lock");
+    if lock.exists() {
+        std::fs::remove_file(path.join("Cargo.lock"))?;
+    }
+
     Ok(())
 }
 
