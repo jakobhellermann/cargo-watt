@@ -4,12 +4,18 @@ mod utils;
 use anyhow::Context;
 use clap::Clap;
 use modifications::ProcMacroFn;
-use std::{path::PathBuf, process::Command};
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 #[derive(Debug, Clap)]
 struct Options {
     #[clap(default_value = ".")]
     path: PathBuf,
+
+    #[clap(long, conflicts_with = "path")]
+    git: Option<String>,
 }
 
 fn main() {
@@ -26,9 +32,22 @@ fn main() {
 }
 
 fn run(options: Options) -> Result<(), anyhow::Error> {
-    let manifest = utils::parse_validate_toml(&options.path.join("Cargo.toml"))?;
+    let tempdir = std::env::temp_dir().join("cargo-watt-crate");
+    if tempdir.exists() {
+        std::fs::remove_dir_all(&tempdir)?;
+    }
 
-    let (fns, wasm) = build_wasm(&options, &manifest)?;
+    if let Some(git) = &options.git {
+        log::info!("git clone '{}' into temporary directory...", &git);
+        utils::clone_git_into(&tempdir, git)?;
+    } else {
+        utils::copy_all(&options.path, &tempdir).context("failed to copy to tmp dir")?;
+    }
+
+    let manifest = utils::parse_validate_toml(&tempdir.join("Cargo.toml"))
+        .context("failed to parse Cargo.toml")?;
+
+    let (fns, wasm) = build_wasm(&tempdir, &manifest)?;
     log::info!("compiled wasm file is {}mb large", wasm.len() / 1024 / 1024);
 
     create_watt_crate(manifest, &wasm, fns)?;
@@ -40,24 +59,21 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
 /// Then modify Cargo.toml (proc-macro2 patch, cdylib) and lib.rs (see modifications::librs).
 /// Next call cargo build --release --target wasm32-unknown-unknown and read to compiled wasm file.
 fn build_wasm(
-    options: &Options,
+    directory: &Path,
     manifest: &toml_edit::Document,
 ) -> Result<(Vec<ProcMacroFn>, Vec<u8>), anyhow::Error> {
     let name = manifest["package"]["name"]
         .as_str()
         .ok_or(anyhow::anyhow!("crate has no name"))?;
 
-    let tempdir = std::env::temp_dir().join(name);
-    utils::copy_all(&options.path, &tempdir).context("failed to copy to tmp dir")?;
-
-    let fns = modifications::make_modifications(&tempdir)
+    let fns = modifications::make_modifications(&directory)
         .context("failed to make modifications to crate")?;
 
     log::info!("begin compiling crate...");
     let instant = std::time::Instant::now();
     let status = Command::new("cargo")
         .args(&["build", "--target", "wasm32-unknown-unknown", "--release"])
-        .current_dir(&tempdir)
+        .current_dir(&directory)
         .status()
         .context("failed to run cargo build")?;
     log::info!("finished in {:.1}s", instant.elapsed().as_secs_f32());
@@ -65,14 +81,14 @@ fn build_wasm(
 
     let wasm_path = std::env::var("CARGO_TARGET_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| tempdir.join("target"))
+        .unwrap_or_else(|_| directory.join("target"))
         .join("wasm32-unknown-unknown/release")
         .join(name.replace("-", "_"))
         .with_extension("wasm");
 
     let wasm = std::fs::read(wasm_path).context("cannot read compiled wasm")?;
 
-    std::fs::remove_dir_all(tempdir)?;
+    std::fs::remove_dir_all(directory)?;
 
     Ok((fns, wasm))
 }

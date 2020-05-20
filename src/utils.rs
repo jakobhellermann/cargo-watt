@@ -1,4 +1,5 @@
-use std::path::Path;
+use anyhow::Context;
+use std::{path::Path, process::Command};
 use walkdir::WalkDir;
 
 pub fn parse_validate_toml(path: &Path) -> Result<toml_edit::Document, anyhow::Error> {
@@ -47,6 +48,20 @@ pub fn copy_all(from: &Path, to: &Path) -> Result<(), anyhow::Error> {
         }
     }
 
+    Ok(())
+}
+
+pub fn clone_git_into(path: &Path, url: &str) -> Result<(), anyhow::Error> {
+    let output = Command::new("git")
+        .arg("clone")
+        .arg(url)
+        .arg(path)
+        .output()
+        .context("cannot execute git")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("failed to clone {}: {}", url, stderr);
+    }
     Ok(())
 }
 
