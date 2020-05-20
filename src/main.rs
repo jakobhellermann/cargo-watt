@@ -20,6 +20,9 @@ struct Options {
     #[cfg_attr(not(feature = "crates"), clap(hidden = true))]
     #[clap(long = "crate", conflicts_with = "path", conflicts_with = "git")]
     crate_: Option<String>,
+
+    #[clap(long)]
+    only_copy_essential: bool,
 }
 
 fn main() {
@@ -42,6 +45,7 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
     }
     std::fs::create_dir_all(&tempdir)?;
 
+    // copy crate (local directory, crates.io, git) into /tmp/cargo-watt-crate
     if let Some(git) = &options.git {
         log::info!("git clone '{}' into temporary directory...", &git);
         utils::clone_git_into(&tempdir, git)?;
@@ -57,14 +61,26 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
 
     let manifest = utils::parse_validate_toml(&tempdir.join("Cargo.toml"))
         .context("failed to parse Cargo.toml")?;
+    let name = manifest["package"]["name"].as_str().unwrap().to_string();
+    let crate_path = PathBuf::from(format!("{}-watt", name));
+    if crate_path.exists() {
+        anyhow::bail!("'{}' already exists", crate_path.display());
+    }
 
     let (fns, wasm) = build_wasm(&tempdir, &manifest)?;
-    log::info!(
-        "compiled wasm file is {:.2}mb large",
-        wasm.len() as f32 / 1024.0 / 1024.0
-    );
+    let size_in_mb = wasm.len() as f32 / 1024.0 / 1024.0;
+    log::info!("compiled wasm file is {:.2}mb large", size_in_mb);
 
-    create_watt_crate(manifest, &wasm, fns)?;
+    create_watt_crate(
+        manifest,
+        &wasm,
+        fns,
+        &crate_path,
+        &tempdir,
+        options.only_copy_essential,
+    )?;
+
+    std::fs::remove_dir_all(&tempdir)?;
 
     Ok(())
 }
@@ -76,9 +92,7 @@ fn build_wasm(
     directory: &Path,
     manifest: &toml_edit::Document,
 ) -> Result<(Vec<ProcMacroFn>, Vec<u8>), anyhow::Error> {
-    let name = manifest["package"]["name"]
-        .as_str()
-        .ok_or(anyhow::anyhow!("crate has no name"))?;
+    let name = manifest["package"]["name"].as_str().unwrap();
 
     let fns = modifications::make_modifications(&directory)
         .context("failed to make modifications to crate")?;
@@ -102,25 +116,11 @@ fn build_wasm(
 
     let wasm = std::fs::read(wasm_path).context("cannot read compiled wasm")?;
 
-    std::fs::remove_dir_all(directory)?;
-
     Ok((fns, wasm))
 }
 
-fn create_watt_crate(
-    mut manifest: toml_edit::Document,
-    wasm: &[u8],
-    fns: Vec<ProcMacroFn>,
-) -> Result<(), anyhow::Error> {
-    let name = manifest["package"]["name"].as_str().unwrap().to_string();
-
-    let crate_path = PathBuf::from(format!("{}-watt", name));
-    let src_path = crate_path.join("src");
-
-    std::fs::create_dir_all(&src_path)?;
-
-    std::fs::write(src_path.join(&name).with_extension("wasm"), wasm)?;
-
+/// Replaces the [dependency] section with a `watt = "0.3"` dependency
+fn modify_cargo_toml_for_watt(manifest: &mut toml_edit::Document) {
     manifest.as_table_mut().remove("dependencies");
     let mut deps = toml_edit::Table::default();
     deps["watt"] = toml_edit::value("0.3");
@@ -128,12 +128,9 @@ fn create_watt_crate(
         .as_table_mut()
         .entry("dependencies")
         .or_insert(toml_edit::Item::Table(deps));
+}
 
-    std::fs::write(
-        crate_path.join("Cargo.toml"),
-        manifest.to_string_in_original_order(),
-    )?;
-
+fn watt_librs(name: &str, fns: &[ProcMacroFn]) -> String {
     let file_name = format!("{}.wasm", &name);
     let lib = quote::quote! {
         static MACRO: watt::WasmMacro = watt::WasmMacro::new(WASM);
@@ -141,7 +138,35 @@ fn create_watt_crate(
 
         #(#fns)*
     };
-    std::fs::write(src_path.join("lib.rs"), lib.to_string())?;
+
+    lib.to_string()
+}
+
+fn create_watt_crate(
+    mut manifest: toml_edit::Document,
+    wasm: &[u8],
+    fns: Vec<ProcMacroFn>,
+    crate_path: &Path,
+    tmp_directory: &Path,
+    only_copy_essential: bool,
+) -> Result<(), anyhow::Error> {
+    let name = manifest["package"]["name"].as_str().unwrap().to_string();
+
+    modify_cargo_toml_for_watt(&mut manifest);
+    let new_toml = manifest.to_string_in_original_order();
+    let lib = watt_librs(&name, &fns);
+
+    let src = crate_path.join("src");
+
+    if !only_copy_essential {
+        utils::copy_all(tmp_directory, &crate_path)?;
+        std::fs::remove_dir_all(&src)?;
+    }
+
+    std::fs::create_dir_all(&src)?;
+    std::fs::write(crate_path.join("Cargo.toml"), new_toml)?;
+    std::fs::write(src.join(&name).with_extension("wasm"), wasm)?;
+    std::fs::write(src.join("lib.rs"), lib.to_string())?;
 
     log::info!("generated crate in {:?}", crate_path);
 

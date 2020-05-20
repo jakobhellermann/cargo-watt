@@ -9,6 +9,10 @@ pub fn parse_validate_toml(path: &Path) -> Result<toml_edit::Document, anyhow::E
     anyhow::ensure!(!manifest["package"].is_none(), "Cargo.toml has no package");
     anyhow::ensure!(!manifest["lib"].is_none(), "Cargo.toml has no lib");
     anyhow::ensure!(
+        manifest["package"]["name"].as_str().is_some(),
+        "Cargo.toml has no name"
+    );
+    anyhow::ensure!(
         manifest["lib"]["proc-macro"].as_bool().unwrap_or(false),
         "crate is not a proc macro"
     );
