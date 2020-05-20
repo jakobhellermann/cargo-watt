@@ -20,6 +20,11 @@ pub fn copy_all(from: &Path, to: &Path) -> Result<(), anyhow::Error> {
     if to.exists() {
         std::fs::remove_dir_all(&to)?;
     }
+    if let Some(parent) = to.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    let len = from.components().fold(0, |acc, _| acc + 1);
 
     let files = WalkDir::new(from);
     for file in files {
@@ -33,7 +38,7 @@ pub fn copy_all(from: &Path, to: &Path) -> Result<(), anyhow::Error> {
         let new_file = entry
             .path()
             .components()
-            .skip(1)
+            .skip(len)
             .fold(to.to_path_buf(), |acc, item| acc.join(item));
         if file_type.is_dir() {
             std::fs::create_dir(new_file)?;
