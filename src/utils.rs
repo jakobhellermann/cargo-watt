@@ -63,6 +63,19 @@ pub fn clone_git_into(path: &Path, url: &str) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
+pub fn cargo_fmt(path: &Path) -> Result<(), anyhow::Error> {
+    let output = Command::new("cargo")
+        .arg("fmt")
+        .current_dir(path)
+        .output()
+        .context("cannot execute git")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("{}", stderr);
+    }
+    Ok(())
+}
+
 #[cfg(feature = "crates")]
 pub fn download_crate(path: &Path, crate_: &str) -> Result<(), anyhow::Error> {
     let err = |e| move || anyhow::anyhow!("invalid crates.io response: {}", e);

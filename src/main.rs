@@ -23,6 +23,9 @@ struct Options {
 
     #[clap(long)]
     only_copy_essential: bool,
+
+    #[clap(long)]
+    overwrite: bool,
 }
 
 fn main() {
@@ -63,8 +66,10 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
         .context("failed to parse Cargo.toml")?;
     let name = manifest["package"]["name"].as_str().unwrap().to_string();
     let crate_path = PathBuf::from(format!("{}-watt", name));
-    if crate_path.exists() {
-        anyhow::bail!("'{}' already exists", crate_path.display());
+    match (crate_path.exists(), options.overwrite) {
+        (true, false) => anyhow::bail!("'{}' already exists. Use --overwrite to overwrite.", crate_path.display()),
+        (true, true) => std::fs::remove_dir_all(&crate_path)?,
+        (false, _) => {},
     }
 
     let (fns, wasm) = build_wasm(&tempdir, &manifest)?;
@@ -169,6 +174,10 @@ fn create_watt_crate(
     std::fs::write(src.join("lib.rs"), lib.to_string())?;
 
     log::info!("generated crate in {:?}", crate_path);
+
+    if let Err(e) = utils::cargo_fmt(&crate_path) {
+        log::warn!("failed to format crate: {}", e);
+    }
 
     Ok(())
 }
