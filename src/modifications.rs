@@ -154,19 +154,31 @@ fn macro_kind(item: &syn::ItemFn) -> Option<ProcMacroKind> {
     item.attrs
         .iter()
         .filter_map(|attr| attr.parse_meta().ok())
-        .filter_map(|meta| match meta {
-            syn::Meta::Path(path) => match path.get_ident() {
-                Some(ident) if ident == "proc_macro" => Some(ProcMacroKind::Macro),
-                Some(ident) if ident == "proc_macro_attribute" => Some(ProcMacroKind::Attribute),
-                _ => None,
-            },
-            syn::Meta::List(syn::MetaList { path, .. }) => match path.get_ident() {
-                Some(ident) if ident == "proc_macro_derive" => Some(ProcMacroKind::Derive),
-                _ => None,
-            },
-            _ => None,
-        })
+        .filter_map(|meta| macro_meta(&meta))
         .next()
+}
+/// either #[proc_macro], #[proc_macro_derive] or #[proc_macro_attribute].
+/// can also be #[cfg_attr(..., *one of the above*)]
+fn macro_meta(meta: &syn::Meta) -> Option<ProcMacroKind> {
+    match meta {
+        syn::Meta::Path(path) => match path.get_ident() {
+            Some(ident) if ident == "proc_macro" => Some(ProcMacroKind::Macro),
+            Some(ident) if ident == "proc_macro_attribute" => Some(ProcMacroKind::Attribute),
+            _ => None,
+        },
+        syn::Meta::List(syn::MetaList { path, nested, .. }) => match path.get_ident() {
+            Some(ident) if ident == "proc_macro_derive" => Some(ProcMacroKind::Derive),
+            Some(ident) if ident == "cfg_attr" => {
+                let cfg_meta = nested.iter().nth(1)?; // nth(0) is cfg condition
+                match cfg_meta {
+                    syn::NestedMeta::Meta(meta) => macro_meta(meta),
+                    _ => None,
+                }
+            }
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 fn rename_tokenstream(sig: &mut syn::Signature) {
