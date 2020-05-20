@@ -38,9 +38,9 @@ pub fn cargo_toml(input: &str) -> Result<String, anyhow::Error> {
     let toml = toml::to_string(&manifest)?;*/
 
     let mut toml = input.replace("proc-macro = true", "crate-type = [\"cdylib\"]");
-    toml.push_str(
-        "\n[patch.crates-io]\nproc-macro2 = { git = \"https://github.com/dtolnay/watt\" }",
-    );
+    toml.push_str("\n[patch.crates-io]\n");
+    toml.push_str("proc-macro2 = { git = \"https://github.com/dtolnay/watt\" }\n");
+    toml.push_str("syn = { git = \"https://github.com/jakobhellermann/syn-watt\" }");
 
     Ok(toml)
 }
