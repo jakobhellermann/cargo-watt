@@ -23,6 +23,7 @@ pub fn compile(
     let instant = std::time::Instant::now();
     let status = Command::new("cargo")
         .args(&["build", "--target", "wasm32-unknown-unknown", "--release"])
+        .env("RUSTFLAGS", rust_flags())
         .current_dir(&directory)
         .status()
         .context("failed to run cargo build")?;
@@ -39,4 +40,15 @@ pub fn compile(
     let wasm = std::fs::read(wasm_path).context("cannot read compiled wasm")?;
 
     Ok((fns, wasm))
+}
+
+fn rust_flags() -> String {
+    match std::env::var("CARGO_HOME") {
+        Ok(cargo_home) => format!("--remap-path-prefix {}=/cargo_home", cargo_home),
+        Err(_) => {
+            log::warn!("the $CARGO_HOME environment variable is not set, probably because you didn't run this as a subcommand.
+ The compiled wasm file will include paths to your local cargo installation, making it hard to ensure reproducible builds.");
+            "".into()
+        }
+    }
 }

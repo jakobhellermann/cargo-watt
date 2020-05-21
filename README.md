@@ -67,7 +67,8 @@ $ cargo watt verify serde-derive_watt/src/serde-derive.wasm --crate serde-derive
  Success!
 ```
 
-** Todo **
+Currently though, a crate compiled an linux will be [different](https://gist.github.com/jakobhellermann/da18d6f2da58414e0fd9c06ae708d2c1) than on macos.
+If you know why this is and how to fix it, please open an issue and explain it to me :)
 
 <br>
 
