@@ -2,6 +2,8 @@ use anyhow::Context;
 use std::{path::Path, process::Command};
 use walkdir::WalkDir;
 
+const UNSUPPORTED_DEPS: &[&str] = &["syn-mid", "synstructure"];
+
 pub fn parse_validate_toml(path: &Path) -> Result<toml_edit::Document, anyhow::Error> {
     let input = std::fs::read_to_string(path).context("error reading Cargo.toml")?;
     let manifest: toml_edit::Document = input.parse().context("failed to parse Cargo.toml")?;
@@ -19,6 +21,17 @@ pub fn parse_validate_toml(path: &Path) -> Result<toml_edit::Document, anyhow::E
         manifest["dependencies"]["watt"].is_none(),
         "already a 'watt' crate"
     );
+
+    if let Some(deps) = manifest["dependencies"].as_table() {
+        for unsupported in UNSUPPORTED_DEPS {
+            if deps.contains_key(unsupported) {
+                anyhow::bail!(
+                    "crate has dependency on '{}', which doesn't work with cargo watt",
+                    unsupported
+                );
+            }
+        }
+    }
 
     Ok(manifest)
 }
