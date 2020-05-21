@@ -54,6 +54,19 @@ Maybe this will be automated by `cargo watt` in the future but until then this i
 
 # Verifying compilation (`cargo watt verify`)
 
+The isolation properties of running the macro inside web assembly ensure that it doesn't have unwanted access to files or the network, but the code it generates can still be mailcious.
+Therefor it is important to be able to verify that a compiled binary wasm file was indeed compiled by some source, which can then be audited manually.
+
+Just as the build subcommand, `cargo watt verify` works with local projects, remote git repos and crates.io crates, you can use it like this:
+
+```sh
+$ cargo watt build --crate serde-derive
+ ...
+$ cargo watt verify serde-derive_watt/src/serde-derive.wasm --crate serde-derive
+ INFO  cargo_watt::wasm > finished in 17.3s
+ Success!
+```
+
 ** Todo **
 
 <br>
