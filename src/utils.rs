@@ -123,11 +123,5 @@ pub fn download_crate(path: &Path, crate_: &str) -> Result<(), anyhow::Error> {
         std::fs::remove_dir_all(&inner_path)?;
     }
 
-    // if we don't delete Cargo.lock, the #[patch] will not be used
-    let lock = path.join("Cargo.lock");
-    if lock.exists() {
-        std::fs::remove_file(path.join("Cargo.lock"))?;
-    }
-
     Ok(())
 }

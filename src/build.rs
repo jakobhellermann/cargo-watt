@@ -78,6 +78,7 @@ fn create_watt_crate(
 
     if !only_copy_essential {
         utils::copy_all(tmp_directory, &crate_path)?;
+        std::fs::remove_file(crate_path.join("Cargo.lock"))?;
         std::fs::remove_dir_all(&src)?;
     }
 
@@ -85,6 +86,11 @@ fn create_watt_crate(
     std::fs::write(crate_path.join("Cargo.toml"), new_toml)?;
     std::fs::write(src.join(&name).with_extension("wasm"), wasm)?;
     std::fs::write(src.join("lib.rs"), lib.to_string())?;
+
+    std::fs::rename(
+        tmp_directory.join("Cargo.lock"),
+        crate_path.join("Cargo.watt.lock"),
+    )?;
 
     log::info!("generated crate in {:?}", crate_path);
 
