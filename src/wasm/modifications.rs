@@ -46,6 +46,15 @@ pub fn cargo_toml(input: &str) -> Result<String, anyhow::Error> {
     cdylib.push("cdylib");
     manifest["lib"]["crate-type"] = value(cdylib);
 
+    // ensure proc-macro2 is in dependencies so that we cat patch it
+    let deps = manifest
+        .as_table_mut()
+        .entry("dependencies")
+        .or_insert(Item::Table(Table::default()))
+        .as_table_mut()
+        .unwrap();
+    deps.entry("proc-macro2").or_insert(value("1.0"));
+
     let patch = patch(&[
         ("proc-macro2", "https://github.com/dtolnay/watt"),
         ("syn", "https://github.com/jakobhellermann/syn-watt"),

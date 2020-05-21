@@ -15,6 +15,10 @@ pub fn parse_validate_toml(path: &Path) -> Result<toml_edit::Document, anyhow::E
         manifest["lib"]["proc-macro"].as_bool().unwrap_or(false),
         "crate is not a proc macro"
     );
+    anyhow::ensure!(
+        manifest["dependencies"]["watt"].is_none(),
+        "already a 'watt' crate"
+    );
 
     Ok(manifest)
 }
