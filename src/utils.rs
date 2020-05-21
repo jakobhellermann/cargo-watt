@@ -22,15 +22,13 @@ pub fn parse_validate_toml(path: &Path) -> Result<toml_edit::Document, anyhow::E
         "already a 'watt' crate"
     );
 
-    if let Some(deps) = manifest["dependencies"].as_table() {
-        for unsupported in UNSUPPORTED_DEPS {
-            if deps.contains_key(unsupported) {
-                anyhow::bail!(
-                    "crate has dependency on '{}', which doesn't work with cargo watt",
-                    unsupported
-                );
-            }
-        }
+    for unsupported in UNSUPPORTED_DEPS {
+        let crate_not_there = manifest["dependencies"][unsupported].is_none();
+        anyhow::ensure!(
+            crate_not_there,
+            "crate has dependency on '{}', which doesn't work with cargo watt",
+            unsupported
+        );
     }
 
     Ok(manifest)

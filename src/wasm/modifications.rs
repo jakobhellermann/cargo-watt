@@ -15,26 +15,35 @@ pub fn make_modifications(path: &Path) -> Result<Vec<ProcMacroFn>, anyhow::Error
     Ok(fns)
 }
 
-pub fn git_dependency(dep: &str) -> InlineTable {
+fn git_dependency(dep: &str) -> InlineTable {
     let mut table = InlineTable::default();
     table.get_or_insert("git", dep);
     table
 }
 
-pub fn patch(deps: &[(&str, &str)]) -> Table {
-    let mut table = Table::new();
-    table.set_implicit(true);
+// returns the (possibly just generated) [patch.crates.io] section
+fn cargo_patch_cratesio(manifest: &mut toml_edit::Document) -> &mut Table {
+    let mut patch = Table::new();
+    patch.set_implicit(true);
 
-    let crates = Table::new();
-    table.set_implicit(true);
+    let patch = manifest["patch"]
+        .or_insert(Item::Table(patch))
+        .as_table_mut()
+        .unwrap();
 
-    let crates = table.entry("crates-io").or_insert(Item::Table(crates));
-    for (crate_, dep) in deps {
-        crates[crate_] = value(git_dependency(dep));
-    }
+    let mut crates = Table::new();
+    crates.set_implicit(true);
 
-    table
+    patch["crates-io"]
+        .or_insert(Item::Table(crates))
+        .as_table_mut()
+        .unwrap()
 }
+
+const PATCHES: &[(&str, &str)] = &[
+    ("proc-macro2", "https://github.com/dtolnay/watt"),
+    ("syn", "https://github.com/jakobhellermann/syn-watt"),
+];
 
 /// changes `proc-macro = true` to `crate-type = ["cdylib"]`
 /// adds a patch for proc-macro2 to point to dtolnay's watt crate.
@@ -46,24 +55,13 @@ pub fn cargo_toml(input: &str) -> Result<String, anyhow::Error> {
     cdylib.push("cdylib");
     manifest["lib"]["crate-type"] = value(cdylib);
 
-    // ensure proc-macro2 is in dependencies so that we cat patch it
-    let deps = manifest
-        .as_table_mut()
-        .entry("dependencies")
-        .or_insert(Item::Table(Table::default()))
-        .as_table_mut()
-        .unwrap();
-    deps.entry("proc-macro2").or_insert(value("1.0"));
+    // ensure dependencies contain proc_macro so that we can patch it
+    manifest["dependencies"]["proc-macro2"].or_insert(value("1.0"));
 
-    let patch = patch(&[
-        ("proc-macro2", "https://github.com/dtolnay/watt"),
-        ("syn", "https://github.com/jakobhellermann/syn-watt"),
-    ]);
-
-    manifest
-        .as_table_mut()
-        .entry("patch")
-        .or_insert(Item::Table(patch));
+    let patch = cargo_patch_cratesio(&mut manifest);
+    for (patched_crate, dep) in PATCHES {
+        patch[patched_crate] = value(git_dependency(dep));
+    }
 
     Ok(manifest.to_string_in_original_order())
 }
