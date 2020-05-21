@@ -10,7 +10,7 @@ Its purposes are
 1. build proc-macro crates without manual intervention for the watt runtime
 2. verify that a wasm file is compiled from a particular source
 
-# Building proc-macro crates
+# Building proc-macro crates (`cargo watt build`)
 
 Building works by first copying a crate (either from a local directory, a git repository or crates.io) into `/tmp`.
 The crate type is then changed to `cdylib` and patches for `proc-macro2` and `syn` are being applied.
@@ -23,7 +23,7 @@ Then all procedural macros in it are being replaced with `rust #[no_mangle] exte
 As a user, all you need to do is
 
 ```sh
-$ cargo watt --crate serde-derive
+$ cargo watt build --crate serde-derive
   INFO  cargo_watt > download crate 'serde-derive' into temporary directory...
   INFO  cargo_watt > begin compiling crate...
      Updating git repository `https://github.com/dtolnay/watt`
@@ -37,7 +37,7 @@ $ cargo watt --crate serde-derive
   INFO  cargo_watt > generated crate in "serde_derive-watt"
 ```
 
-Alternatively you can fetch a git repository (`cargo watt --git https://github.com/idanarye/rust-typed-builder`) or use a local path (`cargo watt ./path/to/crate`).
+Alternatively you can fetch a git repository (`cargo watt build --git https://github.com/idanarye/rust-typed-builder`) or use a local path (`cargo watt build ./path/to/crate`).
 
 By default, `cargo watt` will include all files of original crate (i.e. tests, documentation etc.) in the newly generated one.
 If you'd like to only have `Cargo.toml`, `src/lib.rs` and `src/the-macro.wasm` there is the `--only-copy-essential` option.
@@ -52,7 +52,7 @@ Instead you would need to do `cargo watt --crate thiserror-impl`, clone `thiserr
 
 Maybe this will be automated by `cargo watt` in the future but until then this is a limitation.
 
-# Verifying compilation
+# Verifying compilation (`cargo watt verify`)
 
 ** Todo **
 

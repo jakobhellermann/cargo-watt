@@ -1,4 +1,3 @@
-use crate::utils;
 use std::path::Path;
 use toml_edit::{value, Document, InlineTable, Item, Table};
 
@@ -100,7 +99,7 @@ pub fn librs(input: &str) -> Result<(Vec<ProcMacroFn>, String), anyhow::Error> {
     insert_allow_warnings(&mut file);
 
     let c_abi: syn::Abi = syn::parse_quote!(extern "C");
-    let no_mangle = utils::parse_attributes(quote::quote!(#[no_mangle]))?;
+    let no_mangle = parse_attributes(quote::quote!(#[no_mangle]))?;
 
     let mut fns = Vec::new();
     for (f, kind) in proc_macro_fns(&mut file) {
@@ -141,7 +140,7 @@ fn proc_macro_fns(file: &mut syn::File) -> impl Iterator<Item = (&mut syn::ItemF
 }
 
 fn insert_allow_warnings(file: &mut syn::File) {
-    let mut allow_warnings = utils::parse_attributes(quote::quote!(#[allow(warnings)]))
+    let mut allow_warnings = parse_attributes(quote::quote!(#[allow(warnings)]))
         .unwrap()
         .into_iter()
         .next()
@@ -191,4 +190,18 @@ fn rename_tokenstream(sig: &mut syn::Signature) {
     }
 
     sig.output = syn::ReturnType::Type(syn::parse_quote!(->), Box::new(token_stream));
+}
+
+pub fn parse_attributes(
+    token_stream: proc_macro2::TokenStream,
+) -> syn::Result<Vec<syn::Attribute>> {
+    struct AttrParser(Vec<syn::Attribute>);
+    impl syn::parse::Parse for AttrParser {
+        fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+            Ok(AttrParser(input.call(syn::Attribute::parse_outer)?))
+        }
+    }
+
+    let AttrParser(attrs) = syn::parse2(token_stream)?;
+    Ok(attrs)
 }

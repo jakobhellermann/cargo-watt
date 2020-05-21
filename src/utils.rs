@@ -127,17 +127,3 @@ pub fn download_crate(path: &Path, crate_: &str) -> Result<(), anyhow::Error> {
 
     Ok(())
 }
-
-pub fn parse_attributes(
-    token_stream: proc_macro2::TokenStream,
-) -> syn::Result<Vec<syn::Attribute>> {
-    struct AttrParser(Vec<syn::Attribute>);
-    impl syn::parse::Parse for AttrParser {
-        fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-            Ok(AttrParser(input.call(syn::Attribute::parse_outer)?))
-        }
-    }
-
-    let AttrParser(attrs) = syn::parse2(token_stream)?;
-    Ok(attrs)
-}
