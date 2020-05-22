@@ -12,6 +12,11 @@ pub fn make_modifications(path: &Path) -> Result<Vec<ProcMacroFn>, anyhow::Error
     let (fns, new_lib) = librs(&lib)?;
     std::fs::write(lib_path, new_lib)?;
 
+    let lock = path.join("Cargo.lock");
+    if lock.exists() {
+        std::fs::remove_file(lock)?;
+    }
+
     dump_replace(path)?;
 
     Ok(fns)

@@ -65,8 +65,8 @@ fn main() {
 }
 
 fn run(options: Options) -> Result<(), anyhow::Error> {
-    let tempdir = std::env::temp_dir().join("cargo-watt-crate");
-    if tempdir.exists() {
+    let tempdir = tempfile::tempdir().context("failed to crate temporary directory")?;
+    if tempdir.path().exists() {
         std::fs::remove_dir_all(&tempdir)?;
     }
     std::fs::create_dir_all(&tempdir)?;
@@ -75,11 +75,12 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
     let input = options.input();
     if let Some(git) = &input.git {
         log::info!("git clone '{}' into temporary directory...", &git);
-        utils::clone_git_into(&tempdir, git)?;
+        utils::clone_git_into(tempdir.path(), git)?;
     } else if let Some(crate_) = &input.crate_ {
         log::info!("download crate '{}' into temporary directory...", crate_);
         #[cfg(feature = "crates")]
-        utils::download_crate(&tempdir, crate_).context("failed to download and extract crate")?;
+        utils::download_crate(tempdir.path(), crate_)
+            .context("failed to download and extract crate")?;
         #[cfg(not(feature = "crates"))]
         panic!("the crate was compiled without the 'crates' feature flag");
     } else {
@@ -87,7 +88,7 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
             PathBuf::from("Cargo.toml").exists(),
             "No Cargo.toml found. Use the --git or --crate flag if you want to use a remote crate."
         );
-        utils::copy_all(&input.path, &tempdir).context("failed to copy to tmp dir")?;
+        utils::copy_all(&input.path, tempdir.path()).context("failed to copy to tmp dir")?;
     }
 
     match options {
@@ -95,11 +96,9 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
             only_copy_essential,
             overwrite,
             ..
-        } => build::build(&tempdir, only_copy_essential, overwrite)?,
-        Options::Verify { file, .. } => verify::verify(&tempdir, &file)?,
+        } => build::build(tempdir.path(), only_copy_essential, overwrite)?,
+        Options::Verify { file, .. } => verify::verify(tempdir.path(), &file)?,
     }
-
-    std::fs::remove_dir_all(&tempdir)?;
 
     Ok(())
 }
