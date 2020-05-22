@@ -37,8 +37,8 @@ pub fn build(
     Ok(())
 }
 
-/// Replaces the [dependency] section with a `watt = "0.3"` dependency
 fn modify_cargo_toml_for_watt(manifest: &mut toml_edit::Document) {
+    // Replaces the [dependency] section with a `watt = "0.3"` dependency
     manifest.as_table_mut().remove("dependencies");
     let mut deps = toml_edit::Table::default();
     deps["watt"] = toml_edit::value("0.3");
@@ -46,6 +46,14 @@ fn modify_cargo_toml_for_watt(manifest: &mut toml_edit::Document) {
         .as_table_mut()
         .entry("dependencies")
         .or_insert(toml_edit::Item::Table(deps));
+
+    // remove [features] section
+    if !manifest["features"].is_none() {
+        log::warn!(
+            "features aren't supported in watt, they have been stripped from the generated crate"
+        );
+        manifest.as_table_mut().remove("features");
+    }
 }
 
 fn watt_librs(name: &str, fns: &[ProcMacroFn]) -> String {
