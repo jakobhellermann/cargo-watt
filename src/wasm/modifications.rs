@@ -12,7 +12,27 @@ pub fn make_modifications(path: &Path) -> Result<Vec<ProcMacroFn>, anyhow::Error
     let (fns, new_lib) = librs(&lib)?;
     std::fs::write(lib_path, new_lib)?;
 
+    dump_replace(path)?;
+
     Ok(fns)
+}
+
+fn dump_replace(directory: &Path) -> Result<(), std::io::Error> {
+    let src_files = walkdir::WalkDir::new(directory.join("src"));
+    for file in src_files {
+        let file = file?;
+        if !file.file_type().is_file() {
+            continue;
+        };
+
+        let contents = std::fs::read_to_string(file.path())?;
+        if contents.contains("proc_macro ::") {
+            let replaced = contents.replace("proc_macro ::", "proc_macro2 ::");
+            std::fs::write(file.path(), replaced)?;
+        }
+    }
+
+    Ok(())
 }
 
 fn git_dependency(dep: &str) -> InlineTable {

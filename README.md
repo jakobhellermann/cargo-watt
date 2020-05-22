@@ -13,12 +13,18 @@ Its purposes are
 # Building proc-macro crates (`cargo watt build`)
 
 Building works by first copying a crate (either from a local directory, a git repository or crates.io) into `/tmp`.
-The crate type is then changed to `cdylib` and patches for `proc-macro2` and `syn` are being applied.
+The crate type is then changed to `cdylib`, `proc-macro2` is being patched to dtolnay's `proc_macro2`.
+Next, all procedural macros in it are being replaced with `pub #[no_mangle] extern "C" fn` according to [this](https://github.com/dtolnay/watt#getting-started).
 
-The [syn patch](https://github.com/jakobhellermann/syn-watt) is needed because in wasm there is no `proc-macro` crate, which syn exposes e.g. in the [`proc_macro_input!`](https://docs.rs/syn/1.0.22/syn/macro.parse_macro_input.html) macro.
-The patched version of basically syn has all instances of `proc_macro` replaced with `proc_macro2` and the conditional compilation for `wasm32-unknown-unknown` is removed.
+At this point, simple crates already compile, but there is more to be done to support a wider range of crates. Since we just change some signatures and hope for the best, sometimes stuff stops working. To 'fix' that (altough it's more of a hack), we do the following:
 
-Then all procedural macros in it are being replaced with `rust #[no_mangle] extern "C" fn`s and a shim crate is generated which calls into the generated web assembly file and exetutes the token tree transformation.
+- replace `syn` with [this syn patch](https://github.com/jakobhellermann/syn-watt), which basically has all instances of `proc_macro` replaced with `proc_macro2` and the conditional compilation for `wasm32-unknown-unknown` is removed
+- do a literal search and replace of `proc_macro` to `proc_macro2`. This may sound stupid, but in my testing this works alright.
+
+Of course, some crates still don't compile, in that case you need tweak things yourself.
+Notably, anything depending on `synstructure` or `syn-mid` won't work, maybe patches for those will be provided in the future aswell.
+
+Lastly, a shim crate is generated which calls into the generated web assembly file and executes the token tree transformation.
 
 As a user, all you need to do is
 
@@ -68,7 +74,7 @@ $ cargo watt verify serde-derive_watt/src/serde-derive.wasm --crate serde-derive
 ```
 
 Currently though, a crate compiled an linux will be [different](https://gist.github.com/jakobhellermann/da18d6f2da58414e0fd9c06ae708d2c1) than on macos.
-If you know why this is and how to fix it, please open an issue and explain it to me :)
+If you know why this is and how to fix it, let me know.
 
 <br>
 
