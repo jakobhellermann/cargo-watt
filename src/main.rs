@@ -33,6 +33,9 @@ pub enum Options {
         only_copy_essential: bool,
         #[clap(long)]
         overwrite: bool,
+
+        #[clap(long, about = "don't delete the temporary build directory")]
+        keep_tmp: bool,
     },
     Verify {
         #[clap(required = true)]
@@ -47,6 +50,12 @@ impl Options {
         match self {
             Options::Build { input, .. } => input,
             Options::Verify { input, .. } => input,
+        }
+    }
+    fn keep_tmp(&self) -> bool {
+        match self {
+            Options::Build { keep_tmp, .. } => *keep_tmp,
+            Options::Verify { .. } => false,
         }
     }
 }
@@ -65,22 +74,29 @@ fn main() {
 }
 
 fn run(options: Options) -> Result<(), anyhow::Error> {
-    let tempdir = tempfile::tempdir().context("failed to crate temporary directory")?;
-    if tempdir.path().exists() {
+    let tempdir = tempfile::tempdir()
+        .context("failed to crate temporary directory")?
+        .into_path();
+    if tempdir.exists() {
         std::fs::remove_dir_all(&tempdir)?;
     }
     std::fs::create_dir_all(&tempdir)?;
+
+    let keep_tmp = options.keep_tmp();
+    // if we want to keep the directory, we probably wanna know where it is
+    if keep_tmp {
+        log::info!("generate temporary directory at '{}'", tempdir.display());
+    }
 
     // copy crate (local directory, crates.io, git) into /tmp/cargo-watt-crate
     let input = options.input();
     if let Some(git) = &input.git {
         log::info!("git clone '{}' into temporary directory...", &git);
-        utils::clone_git_into(tempdir.path(), git)?;
+        utils::clone_git_into(&tempdir, git)?;
     } else if let Some(crate_) = &input.crate_ {
         log::info!("download crate '{}' into temporary directory...", crate_);
         #[cfg(feature = "crates")]
-        utils::download_crate(tempdir.path(), crate_)
-            .context("failed to download and extract crate")?;
+        utils::download_crate(&tempdir, crate_).context("failed to download and extract crate")?;
         #[cfg(not(feature = "crates"))]
         panic!("the crate was compiled without the 'crates' feature flag");
     } else {
@@ -88,7 +104,7 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
             PathBuf::from("Cargo.toml").exists(),
             "No Cargo.toml found. Use the --git or --crate flag if you want to use a remote crate."
         );
-        utils::copy_all(&input.path, tempdir.path()).context("failed to copy to tmp dir")?;
+        utils::copy_all(&input.path, &tempdir).context("failed to copy to tmp dir")?;
     }
 
     match options {
@@ -96,8 +112,12 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
             only_copy_essential,
             overwrite,
             ..
-        } => build::build(tempdir.path(), only_copy_essential, overwrite)?,
-        Options::Verify { file, .. } => verify::verify(tempdir.path(), &file)?,
+        } => build::build(&tempdir, only_copy_essential, overwrite)?,
+        Options::Verify { file, .. } => verify::verify(&tempdir, &file)?,
+    }
+
+    if !keep_tmp {
+        std::fs::remove_dir_all(tempdir)?;
     }
 
     Ok(())
