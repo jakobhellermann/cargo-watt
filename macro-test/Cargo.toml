@@ -2,6 +2,7 @@
 name = "macro-test"
 version = "0.2.3"
 description = "example macro crate for cargo-watt"
+edition = "2018"
 
 [lib]
 proc-macro = true

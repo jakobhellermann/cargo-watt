@@ -8,6 +8,10 @@ pub fn parse_validate_toml(path: &Path) -> Result<toml_edit::Document, anyhow::E
     let input = std::fs::read_to_string(path).context("error reading Cargo.toml")?;
     let manifest: toml_edit::Document = input.parse().context("failed to parse Cargo.toml")?;
 
+    if manifest["package"]["edition"].as_str() != Some("2018") {
+        log::warn!("macro crate is not 2018 edition, which may not work in some cases");
+    }
+
     anyhow::ensure!(!manifest["package"].is_none(), "Cargo.toml has no package");
     anyhow::ensure!(
         manifest["package"]["name"].as_str().is_some(),
