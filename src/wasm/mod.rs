@@ -1,6 +1,6 @@
 mod modifications;
 
-pub use modifications::ProcMacroFn;
+pub use modifications::{ProcMacroFn, ProcMacroKind};
 
 use anyhow::Context;
 use std::{

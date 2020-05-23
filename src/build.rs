@@ -1,6 +1,6 @@
 use crate::{
     utils,
-    wasm::{self, ProcMacroFn},
+    wasm::{self, ProcMacroFn, ProcMacroKind},
 };
 use std::path::{Path, PathBuf};
 
@@ -37,15 +37,18 @@ pub fn build(
     Ok(())
 }
 
+// Replaces the [dependency] section with a `watt = "0.3"` dependency
 fn modify_cargo_toml_for_watt(manifest: &mut toml_edit::Document) {
-    // Replaces the [dependency] section with a `watt = "0.3"` dependency
+    // if the crate depends on proc-macro-hack, we wanna use it aswell
+    let proc_macro_hack = manifest["dependencies"]["proc-macro-hack"].clone();
+
     manifest.as_table_mut().remove("dependencies");
+
     let mut deps = toml_edit::Table::default();
     deps["watt"] = toml_edit::value("0.3");
-    manifest
-        .as_table_mut()
-        .entry("dependencies")
-        .or_insert(toml_edit::Item::Table(deps));
+    deps["proc-macro-hack"] = proc_macro_hack;
+
+    manifest["dependencies"] = toml_edit::Item::Table(deps);
 
     // remove [features] section
     if !manifest["features"].is_none() {
@@ -57,8 +60,17 @@ fn modify_cargo_toml_for_watt(manifest: &mut toml_edit::Document) {
 }
 
 fn watt_librs(name: &str, fns: &[ProcMacroFn]) -> String {
+    let uses_proc_macro_hack = fns.iter().any(|f| f.kind == ProcMacroKind::ProcMacroHack);
+    let use_proc_macro_hack = if uses_proc_macro_hack {
+        Some(quote::quote! { use proc_macro_hack::proc_macro_hack; })
+    } else {
+        None
+    };
+
     let file_name = format!("{}.wasm", &name);
     let lib = quote::quote! {
+        #use_proc_macro_hack
+
         static MACRO: watt::WasmMacro = watt::WasmMacro::new(WASM);
         static WASM: &[u8] = include_bytes!(#file_name);
 

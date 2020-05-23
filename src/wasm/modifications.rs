@@ -108,16 +108,19 @@ pub struct ProcMacroFn {
     pub attrs: Vec<syn::Attribute>,
     pub kind: ProcMacroKind,
 }
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ProcMacroKind {
     Macro,
     Derive,
     Attribute,
+    ProcMacroHack,
 }
 impl quote::ToTokens for ProcMacroFn {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let ident = &self.name;
         let mut new_fn: syn::ItemFn = match self.kind {
-            ProcMacroKind::Macro => syn::parse_quote! {
+            ProcMacroKind::Macro | ProcMacroKind::ProcMacroHack => syn::parse_quote! {
                 pub fn #ident(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                     MACRO.proc_macro(stringify!(#ident), input)
                 }
@@ -207,6 +210,7 @@ fn macro_meta(meta: &syn::Meta) -> Option<ProcMacroKind> {
         syn::Meta::Path(path) => match path.get_ident() {
             Some(ident) if ident == "proc_macro" => Some(ProcMacroKind::Macro),
             Some(ident) if ident == "proc_macro_attribute" => Some(ProcMacroKind::Attribute),
+            Some(ident) if ident == "proc_macro_hack" => Some(ProcMacroKind::ProcMacroHack),
             _ => None,
         },
         syn::Meta::List(syn::MetaList { path, nested, .. }) => match path.get_ident() {
