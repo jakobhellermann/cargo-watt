@@ -107,18 +107,18 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
         utils::copy_all(&input.path, &tempdir).context("failed to copy to tmp dir")?;
     }
 
-    match options {
+    let result = match options {
         Options::Build {
             only_copy_essential,
             overwrite,
             ..
-        } => build::build(&tempdir, only_copy_essential, overwrite)?,
-        Options::Verify { file, .. } => verify::verify(&tempdir, &file)?,
-    }
+        } => build::build(&tempdir, only_copy_essential, overwrite),
+        Options::Verify { file, .. } => verify::verify(&tempdir, &file),
+    };
 
     if !keep_tmp {
         std::fs::remove_dir_all(tempdir)?;
     }
 
-    Ok(())
+    result
 }

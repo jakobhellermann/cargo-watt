@@ -30,10 +30,22 @@ fn dump_replace(directory: &Path) -> Result<(), std::io::Error> {
             continue;
         };
 
-        let contents = std::fs::read_to_string(file.path())?;
-        if contents.contains("proc_macro ::") {
-            let replaced = contents.replace("proc_macro ::", "proc_macro2 ::");
-            std::fs::write(file.path(), replaced)?;
+        let mut contents = std::fs::read_to_string(file.path())?;
+        let mut changed = false;
+
+        // TODO make this more efficient
+        let from = ["proc_macro ::", "proc_macro::"];
+        let to = "proc_macro2 ::";
+
+        for needle in &from {
+            if contents.contains(needle) {
+                contents = contents.replace(needle, to);
+                changed = true;
+            }
+        }
+
+        if changed {
+            std::fs::write(file.path(), contents)?;
         }
     }
 
