@@ -144,6 +144,7 @@ impl quote::ToTokens for ProcMacroFn {
 pub fn librs(input: &str) -> Result<(Vec<ProcMacroFn>, String), anyhow::Error> {
     let mut file = syn::parse_str::<syn::File>(input)?;
     insert_allow_warnings(&mut file);
+    remove_extern_procmacro(&mut file);
 
     let c_abi: syn::Abi = syn::parse_quote!(extern "C");
     let no_mangle = parse_attributes(quote::quote!(#[no_mangle]))?;
@@ -194,6 +195,13 @@ fn insert_allow_warnings(file: &mut syn::File) {
         .unwrap();
     allow_warnings.style = syn::AttrStyle::Inner(syn::parse_quote!(!));
     file.attrs.push(allow_warnings);
+}
+
+fn remove_extern_procmacro(file: &mut syn::File) {
+    file.items.retain(|item| match item {
+        syn::Item::ExternCrate(extern_crate) => extern_crate.ident != "proc_macro",
+        _ => true,
+    })
 }
 
 fn macro_kind(item: &syn::ItemFn) -> Option<ProcMacroKind> {
