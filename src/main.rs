@@ -100,8 +100,9 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
         #[cfg(not(feature = "crates"))]
         panic!("the crate was compiled without the 'crates' feature flag");
     } else {
+        let cargo_toml = input.path.join("Cargo.toml");
         anyhow::ensure!(
-            PathBuf::from("Cargo.toml").exists(),
+            cargo_toml.exists(),
             "No Cargo.toml found. Use the --git or --crate flag if you want to use a remote crate."
         );
         utils::copy_all(&input.path, &tempdir).context("failed to copy to tmp dir")?;
