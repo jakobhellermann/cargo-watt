@@ -76,6 +76,34 @@ $ cargo watt verify serde-derive_watt/src/serde-derive.wasm --crate serde-derive
 Currently though, a crate compiled an linux will be [different](https://gist.github.com/jakobhellermann/da18d6f2da58414e0fd9c06ae708d2c1) than on macos.
 If you know why this is and how to fix it, let me know.
 
+---
+
+## Performance
+
+How much of a difference does this make regarding compile times?
+
+I profiled a crate with the following dependencies:
+
+```toml
+tokio = { version = "0.2", features = ["macros"] }
+thiserror = "1.0"
+
+[patches.crates-io]
+tokio-macros = { git = "https://github.com/jakobhellermann/watt-contrib" }
+thiserror-impl = { git = "https://github.com/jakobhellermann/watt-contrib" }
+```
+
+Without the patches:
+
+![Profile without watt](./assets/profile-without.png)
+
+With patches:
+
+![Profile with watt](./assets/profile-watt.png)
+
+That's a difference of 6 seconds vs 17 seconds, so not bad.
+Of course, in a real project you're gonna have a more non-macro crates, but it's still faster.
+
 <br>
 
 #### LICENSE
