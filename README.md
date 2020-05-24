@@ -92,7 +92,7 @@ I profiled a crate with the following dependencies:
 tokio = { version = "0.2", features = ["macros"] }
 thiserror = "1.0"
 
-[patches.crates-io]
+[patch.crates-io]
 tokio-macros = { git = "https://github.com/jakobhellermann/watt-contrib" }
 thiserror-impl = { git = "https://github.com/jakobhellermann/watt-contrib" }
 ```
