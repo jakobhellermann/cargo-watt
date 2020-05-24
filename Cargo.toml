@@ -1,9 +1,13 @@
 [package]
 name = "cargo-watt"
-description = "generate watt versions of procedural macro crates"
 version = "0.1.0"
 authors = ["Jakob Hellermann <jakob.hellermann@protonmail.com>"]
 edition = "2018"
+license = "MIT"
+readme = "README.md"
+description = "generate watt versions of procedural macro crates"
+categories = ["development-tools::procedural-macro-helpers", "development-tools::cargo-plugins"]
+repository = "https://github.com/jakobhellermann/cargo-watt"
 
 [dependencies]
 clap = "3.0.0-beta.1"

@@ -7,14 +7,16 @@ I assume you are familiar with [watt](https://github.com/dtolnay/watt/blob/maste
 There, tooling improvements are listed as _remaining work_, and this cargo subcommand aims to achieve that.
 Its purposes are
 
-1. build proc-macro crates without manual intervention for the watt runtime
+1. compile existing proc-macro crates without manual intervention for the watt runtime
 2. verify that a wasm file is compiled from a particular source
+
+A list of some popular procedural macros compiled with `cargo watt` is available [here](https://github.com/jakobhellermann/watt-contrib).
 
 # Building proc-macro crates (`cargo watt build`)
 
 Building works by first copying a crate (either from a local directory, a git repository or crates.io) into `/tmp`.
 The crate type is then changed to `cdylib`, `proc-macro2` is being patched to dtolnay's `proc_macro2`.
-Next, all procedural macros in it are being replaced with `pub #[no_mangle] extern "C" fn` according to [this](https://github.com/dtolnay/watt#getting-started).
+Next, all procedural macros in it are being replaced with `pub #[no_mange] extern "C"` fns and `proc_macro` is replaced with `proc_macro2`, see [this](https://github.com/dtolnay/watt#getting-started).
 
 At this point, simple crates already compile, but there is more to be done to support a wider range of crates. Since we just change some signatures and hope for the best, sometimes stuff stops working. To 'fix' that (altough it's more of a hack), we do the following:
 
@@ -22,7 +24,7 @@ At this point, simple crates already compile, but there is more to be done to su
 - do a literal search and replace of `proc_macro` to `proc_macro2`. This may sound stupid, but in my testing this works alright.
 
 Of course, some crates still don't compile, in that case you need tweak things yourself.
-Notably, anything depending on `synstructure` or `syn-mid` won't work, maybe patches for those will be provided in the future aswell.
+Notably, anything depending on `synstructure` or `proc_macro_error` won't work, maybe patches for those will be provided in the future aswell.
 
 Lastly, a shim crate is generated which calls into the generated web assembly file and executes the token tree transformation.
 
@@ -52,11 +54,7 @@ If you'd like to only have `Cargo.toml`, `src/lib.rs` and `src/the-macro.wasm` t
 
 Some proc-macro crates need to export other things then the actual macros, so they are split into a regular rust crate exporting some Traits/Functions, which then reexports the macros from another crate.
 
-This is why `cargo watt --crate thiserror` will tell you that thiserror is not a proc macro crate.
-
-Instead you would need to do `cargo watt --crate thiserror-impl`, clone `thiserror` and change it's `impl`-dependency to our generated watt crate.
-
-Maybe this will be automated by `cargo watt` in the future but until then this is a limitation.
+This is why for example `cargo watt --crate thiserror` will tell you that thiserror is not a proc macro crate. Instead, what you need to do is run `cargo watt --crate thiserror-impl` and `[patch]` `thiserror-impl` to your generated crate.
 
 # Verifying compilation (`cargo watt verify`)
 
@@ -77,6 +75,12 @@ Currently though, a crate compiled an linux will be [different](https://gist.git
 If you know why this is and how to fix it, let me know.
 
 ---
+
+## Installation
+
+```sh
+$ cargo install cargo-watt
+```
 
 ## Performance
 
@@ -102,7 +106,7 @@ With patches:
 ![Profile with watt](./assets/profile-watt.png)
 
 That's a difference of 6 seconds vs 17 seconds, so not bad.
-Of course, in a real project you're gonna have a more non-macro crates, but it's still faster.
+Of course, in a real project you're gonna have a more non-macro crates so the speed-up is less noticable, but it's still faster.
 
 <br>
 
