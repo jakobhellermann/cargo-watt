@@ -50,12 +50,17 @@ fn modify_cargo_toml_for_watt(manifest: &mut toml_edit::Document) {
 
     manifest["dependencies"] = toml_edit::Item::Table(deps);
 
-    // remove [features] section
     if !manifest["features"].is_none() {
         log::warn!(
-            "features aren't supported in watt, they have been stripped from the generated crate"
+            "features aren't supported in watt, the crate will be compiled with all enabled"
         );
-        manifest.as_table_mut().remove("features");
+        let table = manifest["features"].as_table_mut();
+        if let Some(features) = table {
+            let all_features: Vec<String> = features.iter().map(|(f, _)| f.to_string()).collect();
+            for f in all_features {
+                features[&f] = toml_edit::value(toml_edit::Array::default());
+            }
+        }
     }
 }
 

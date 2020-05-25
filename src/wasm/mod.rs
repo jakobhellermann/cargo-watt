@@ -22,7 +22,13 @@ pub fn compile(
     log::info!("begin compiling crate...");
     let instant = std::time::Instant::now();
     let status = Command::new("cargo")
-        .args(&["build", "--target", "wasm32-unknown-unknown", "--release"])
+        .args(&[
+            "build",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--release",
+            "--all-features",
+        ])
         .env("RUSTFLAGS", rust_flags())
         .current_dir(&directory)
         .status()
