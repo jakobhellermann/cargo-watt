@@ -83,7 +83,12 @@ pub fn compile(
         log::debug!("after wasm-opt: {}kb", size / 1024);
     }
 
-    let wasm = std::fs::read(wasm_path).context("cannot read compiled wasm")?;
+    let mut wasm = std::fs::read(wasm_path).context("cannot read compiled wasm")?;
+
+    if compilation_options.compress {
+        wasm = miniz_oxide::deflate::compress_to_vec(&wasm, 6);
+        log::debug!("after compression: {}kb", wasm.len() / 1024);
+    }
 
     Ok((fns, wasm))
 }

@@ -29,6 +29,9 @@ pub struct CompilationOptions {
 
     #[clap(long)]
     no_wasm_opt: bool,
+
+    #[clap(long)]
+    compress: bool,
 }
 impl CompilationOptions {
     fn verify(&self) -> Result<(), anyhow::Error> {

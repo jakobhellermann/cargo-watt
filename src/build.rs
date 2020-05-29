@@ -32,13 +32,14 @@ pub fn build(
         &crate_path,
         directory,
         only_copy_essential,
+        compilation_options.compress,
     )?;
 
     Ok(())
 }
 
 // Replaces the [dependency] section with a `watt = "0.3"` dependency
-fn modify_cargo_toml_for_watt(manifest: &mut toml_edit::Document) {
+fn modify_cargo_toml_for_watt(manifest: &mut toml_edit::Document, compress: bool) {
     // if the crate depends on proc-macro-hack, we wanna use it aswell
     let proc_macro_hack = manifest["dependencies"]["proc-macro-hack"].clone();
 
@@ -47,6 +48,11 @@ fn modify_cargo_toml_for_watt(manifest: &mut toml_edit::Document) {
     let mut deps = toml_edit::Table::default();
     deps["watt"] = toml_edit::value("0.3");
     deps["proc-macro-hack"] = proc_macro_hack;
+
+    if compress {
+        deps["miniz_oxide"] = toml_edit::value("0.3");
+        deps["once_cell"] = toml_edit::value("1.4");
+    }
 
     manifest["dependencies"] = toml_edit::Item::Table(deps);
 
@@ -64,7 +70,7 @@ fn modify_cargo_toml_for_watt(manifest: &mut toml_edit::Document) {
     }
 }
 
-fn watt_librs(name: &str, fns: &[ProcMacroFn]) -> String {
+fn watt_librs(name: &str, fns: &[ProcMacroFn], compress: bool) -> String {
     let uses_proc_macro_hack = fns.iter().any(|f| f.kind == ProcMacroKind::ProcMacroHack);
     let use_proc_macro_hack = if uses_proc_macro_hack {
         Some(quote::quote! { use proc_macro_hack::proc_macro_hack; })
@@ -72,12 +78,30 @@ fn watt_librs(name: &str, fns: &[ProcMacroFn]) -> String {
         None
     };
 
-    let file_name = format!("{}.wasm", &name);
-    let lib = quote::quote! {
-        #use_proc_macro_hack
+    let mut file_name = format!("{}.wasm", &name);
+    if compress {
+        file_name.push_str(".deflate");
+    }
 
-        static MACRO: watt::WasmMacro = watt::WasmMacro::new(WASM);
-        static WASM: &[u8] = include_bytes!(#file_name);
+    let macro_static = if compress {
+        quote::quote! {
+            extern crate once_cell;
+
+            use once_cell::sync::Lazy;
+
+            static WASM: Lazy<Vec<u8>> = Lazy::new(|| miniz_oxide::inflate::decompress_to_vec(include_bytes!(#file_name)).expect("failed to decomress wasm"));
+            static MACRO: Lazy<watt::WasmMacro> = Lazy::new(|| watt::WasmMacro::new(&WASM));
+        }
+    } else {
+        quote::quote! {
+            static WASM: &[u8] = include_bytes!(#file_name);
+            static MACRO: watt::WasmMacro = watt::WasmMacro::new(WASM);
+        }
+    };
+
+    let lib = quote::quote! {
+        #macro_static
+        #use_proc_macro_hack
 
         #(#fns)*
     };
@@ -92,12 +116,13 @@ fn create_watt_crate(
     crate_path: &Path,
     tmp_directory: &Path,
     only_copy_essential: bool,
+    compress: bool,
 ) -> Result<(), anyhow::Error> {
     let name = manifest["package"]["name"].as_str().unwrap().to_string();
 
-    modify_cargo_toml_for_watt(&mut manifest);
+    modify_cargo_toml_for_watt(&mut manifest, compress);
     let new_toml = manifest.to_string_in_original_order();
-    let lib = watt_librs(&name, &fns);
+    let lib = watt_librs(&name, &fns, compress);
 
     let src = crate_path.join("src");
 
@@ -107,9 +132,14 @@ fn create_watt_crate(
         std::fs::remove_dir_all(&src)?;
     }
 
+    let mut wasm_file = src.join(&name).with_extension("wasm");
+    if compress {
+        wasm_file.set_extension("wasm.deflate");
+    }
+
     std::fs::create_dir_all(&src)?;
     std::fs::write(crate_path.join("Cargo.toml"), new_toml)?;
-    std::fs::write(src.join(&name).with_extension("wasm"), wasm)?;
+    std::fs::write(wasm_file, wasm)?;
     std::fs::write(src.join("lib.rs"), lib.to_string())?;
 
     std::fs::rename(
