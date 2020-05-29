@@ -1,11 +1,13 @@
 use crate::{
     utils,
     wasm::{self, ProcMacroFn, ProcMacroKind},
+    CompilationOptions,
 };
 use std::path::{Path, PathBuf};
 
 pub fn build(
     directory: &Path,
+    compilation_options: &CompilationOptions,
     only_copy_essential: bool,
     overwrite: bool,
 ) -> Result<(), anyhow::Error> {
@@ -21,9 +23,7 @@ pub fn build(
         (false, _) => {}
     }
 
-    let (fns, wasm) = wasm::compile(directory, &manifest)?;
-    let size_in_mb = wasm.len() as f32 / 1024.0 / 1024.0;
-    log::info!("compiled wasm file is {:.2}mb large", size_in_mb);
+    let (fns, wasm) = wasm::compile(directory, &manifest, compilation_options)?;
 
     create_watt_crate(
         manifest,

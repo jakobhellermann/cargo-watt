@@ -2,17 +2,30 @@ mod modifications;
 
 pub use modifications::{ProcMacroFn, ProcMacroKind};
 
+use crate::CompilationOptions;
 use anyhow::Context;
 use std::{
     path::{Path, PathBuf},
     process::Command,
 };
 
+#[cfg(unix)]
+fn file_size(path: &Path) -> Result<u64, std::io::Error> {
+    use std::os::unix::fs::MetadataExt;
+    Ok(std::fs::metadata(&path)?.size())
+}
+#[cfg(not(unix))]
+fn file_size(path: &Path) -> Result<u64, anyhow::Error> {
+    let content = std::fs::read(path)?;
+    Ok(content.len() as u64)
+}
+
 /// Modify Cargo.toml (proc-macro2 patch, cdylib) and lib.rs (see modifications::librs).
 /// Then call cargo build --release --target wasm32-unknown-unknown and read to compiled wasm file.
 pub fn compile(
     directory: &Path,
     manifest: &toml_edit::Document,
+    compilation_options: &CompilationOptions,
 ) -> Result<(Vec<ProcMacroFn>, Vec<u8>), anyhow::Error> {
     let name = manifest["package"]["name"].as_str().unwrap();
 
@@ -42,6 +55,33 @@ pub fn compile(
         .join("wasm32-unknown-unknown/release")
         .join(name.replace("-", "_"))
         .with_extension("wasm");
+
+    let size = file_size(&wasm_path)?;
+    log::debug!("wasm file size: {}kb", size / 1024);
+
+    if !compilation_options.no_wasm_strip {
+        let status = Command::new("wasm-strip")
+            .arg(&wasm_path)
+            .status()
+            .context("failed to run wasm-strip")?;
+        anyhow::ensure!(status.success(), "wasm-strip failed");
+
+        let size = file_size(&wasm_path)?;
+        log::debug!("after wasm-strip: {}kb", size / 1024);
+    }
+    if !compilation_options.no_wasm_opt {
+        let status = Command::new("wasm-opt")
+            .arg(&wasm_path)
+            .arg("-o")
+            .arg(&wasm_path)
+            .arg("-Os")
+            .status()
+            .context("failed to run wasm-opt")?;
+        anyhow::ensure!(status.success(), "wasm-opt failed");
+
+        let size = file_size(&wasm_path)?;
+        log::debug!("after wasm-opt: {}kb", size / 1024);
+    }
 
     let wasm = std::fs::read(wasm_path).context("cannot read compiled wasm")?;
 

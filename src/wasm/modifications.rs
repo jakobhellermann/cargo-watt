@@ -59,20 +59,20 @@ fn git_dependency(dep: &str) -> InlineTable {
 }
 
 // returns the (possibly just generated) [patch.crates.io] section
-fn cargo_patch_cratesio(manifest: &mut toml_edit::Document) -> &mut Table {
-    let mut patch = Table::new();
-    patch.set_implicit(true);
+fn implicit_table<'a>(manifest: &'a mut toml_edit::Document, a: &str, b: &str) -> &'a mut Table {
+    let mut a_table = Table::new();
+    a_table.set_implicit(true);
 
-    let patch = manifest["patch"]
-        .or_insert(Item::Table(patch))
+    let patch = manifest[a]
+        .or_insert(Item::Table(a_table))
         .as_table_mut()
         .unwrap();
 
-    let mut crates = Table::new();
-    crates.set_implicit(true);
+    let mut b_table = Table::new();
+    b_table.set_implicit(true);
 
-    patch["crates-io"]
-        .or_insert(Item::Table(crates))
+    patch[b]
+        .or_insert(Item::Table(b_table))
         .as_table_mut()
         .unwrap()
 }
@@ -92,10 +92,14 @@ pub fn cargo_toml(input: &str) -> Result<String, anyhow::Error> {
     cdylib.push("cdylib");
     manifest["lib"]["crate-type"] = value(cdylib);
 
+    let release_profile = implicit_table(&mut manifest, "profile", "release");
+    release_profile["codegen-units"] = value(1);
+    release_profile["opt-level"] = value("s");
+
     // ensure dependencies contain proc_macro so that we can patch it
     manifest["dependencies"]["proc-macro2"].or_insert(value("1.0"));
 
-    let patch = cargo_patch_cratesio(&mut manifest);
+    let patch = implicit_table(&mut manifest, "patch", "crates-io");
     for (patched_crate, dep) in PATCHES {
         patch[patched_crate] = value(git_dependency(dep));
     }

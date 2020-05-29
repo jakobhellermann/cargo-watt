@@ -22,12 +22,42 @@ pub struct Input {
     crate_: Option<String>,
 }
 
+#[derive(Clap, Debug)]
+pub struct CompilationOptions {
+    #[clap(long)]
+    no_wasm_strip: bool,
+
+    #[clap(long)]
+    no_wasm_opt: bool,
+}
+impl CompilationOptions {
+    fn verify(&self) -> Result<(), anyhow::Error> {
+        let exists = |cmd: &str| {
+            std::process::Command::new(cmd)
+                .stdout(std::process::Stdio::null())
+                .arg("--version")
+                .status()
+                .is_ok()
+        };
+        if !self.no_wasm_strip && !exists("wasm-strip") {
+            anyhow::bail!("cannot find wasm-strip, try --no-wasm-strip");
+        }
+        if !self.no_wasm_opt && !exists("wasm-opt") {
+            anyhow::bail!("cannot find wasm-opt, try --no-wasm-opt");
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clap)]
 #[clap(setting = clap::AppSettings::ColoredHelp, bin_name = "cargo watt", about = clap::crate_description!())]
 pub enum Options {
     Build {
         #[clap(flatten)]
         input: Input,
+
+        #[clap(flatten)]
+        compilation_options: CompilationOptions,
 
         #[clap(long, about = "copy only Cargo.toml and src/* to new crate")]
         only_copy_essential: bool,
@@ -43,6 +73,9 @@ pub enum Options {
 
         #[clap(flatten)]
         input: Input,
+
+        #[clap(flatten)]
+        compilation_options: CompilationOptions,
     },
 }
 impl Options {
@@ -50,6 +83,18 @@ impl Options {
         match self {
             Options::Build { input, .. } => input,
             Options::Verify { input, .. } => input,
+        }
+    }
+    fn compilation_options(&self) -> &CompilationOptions {
+        match self {
+            Options::Build {
+                compilation_options,
+                ..
+            } => compilation_options,
+            Options::Verify {
+                compilation_options,
+                ..
+            } => compilation_options,
         }
     }
     fn keep_tmp(&self) -> bool {
@@ -62,7 +107,7 @@ impl Options {
 
 fn main() {
     pretty_env_logger::formatted_builder()
-        .parse_filters(&std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()))
+        .parse_filters(&std::env::var("RUST_LOG").unwrap_or_else(|_| "cargo_watt=debug".into()))
         .init();
 
     let args = std::env::args().filter(|arg| arg != "watt");
@@ -74,6 +119,8 @@ fn main() {
 }
 
 fn run(options: Options) -> Result<(), anyhow::Error> {
+    options.compilation_options().verify()?;
+
     let tempdir = tempfile::tempdir()
         .context("failed to crate temporary directory")?
         .into_path();
@@ -112,9 +159,19 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
         Options::Build {
             only_copy_essential,
             overwrite,
+            compilation_options,
             ..
-        } => build::build(&tempdir, only_copy_essential, overwrite),
-        Options::Verify { file, .. } => verify::verify(&tempdir, &file),
+        } => build::build(
+            &tempdir,
+            &compilation_options,
+            only_copy_essential,
+            overwrite,
+        ),
+        Options::Verify {
+            file,
+            compilation_options,
+            ..
+        } => verify::verify(&tempdir, &compilation_options, &file),
     };
 
     if !keep_tmp {
