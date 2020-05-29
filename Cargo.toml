@@ -13,7 +13,7 @@ repository = "https://github.com/jakobhellermann/cargo-watt"
 clap = "3.0.0-beta.1"
 anyhow = "1.0"
 pretty_env_logger = "0.4"
-log = "0.4.8"
+log = "0.4"
 
 # syn = { version = "1.0", features = ["extra-traits"] }
 syn = "1.0"
@@ -24,7 +24,7 @@ toml_edit = "0.1"
 serde_json = "1.0"
 
 walkdir = "2.3"
-tempfile = "3.1"
+fastrand = "1.1"
 
 ureq = { version = "1.0", default-features = false, features = ["tls"], optional = true }
 

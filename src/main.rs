@@ -124,17 +124,11 @@ fn main() {
 fn run(options: Options) -> Result<(), anyhow::Error> {
     options.compilation_options().verify()?;
 
-    let tempdir = tempfile::tempdir()
-        .context("failed to crate temporary directory")?
-        .into_path();
-    if tempdir.exists() {
-        std::fs::remove_dir_all(&tempdir)?;
-    }
-    std::fs::create_dir_all(&tempdir)?;
+    let mut tempdir = utils::Tempdir::new().context("failed to crate temporary directory")?;
 
-    let keep_tmp = options.keep_tmp();
     // if we want to keep the directory, we probably wanna know where it is
-    if keep_tmp {
+    if options.keep_tmp() {
+        tempdir.set_delete(false);
         log::info!("generate temporary directory at '{}'", tempdir.display());
     }
 
@@ -176,10 +170,6 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
             ..
         } => verify::verify(&tempdir, &compilation_options, &file),
     };
-
-    if !keep_tmp {
-        std::fs::remove_dir_all(tempdir)?;
-    }
 
     result
 }

@@ -1,5 +1,8 @@
 use anyhow::Context;
-use std::{path::Path, process::Command};
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 use walkdir::WalkDir;
 
 const UNSUPPORTED_DEPS: &[&str] = &["syn-mid", "synstructure"];
@@ -139,4 +142,43 @@ pub fn download_crate(path: &Path, crate_: &str) -> Result<(), anyhow::Error> {
     }
 
     Ok(())
+}
+
+pub struct Tempdir {
+    path: PathBuf,
+    delete: bool,
+}
+impl Tempdir {
+    pub fn new() -> std::io::Result<Self> {
+        let name: String = (0..=6).map(|_| fastrand::alphanumeric()).collect();
+
+        let mut path = std::env::temp_dir();
+        path.push(format!(".tmp{}", name));
+
+        if path.exists() {
+            std::fs::remove_dir_all(&path)?;
+        }
+        std::fs::create_dir_all(&path)?;
+        Ok(Tempdir { path, delete: true })
+    }
+
+    pub fn set_delete(&mut self, delete: bool) {
+        self.delete = delete;
+    }
+}
+impl Drop for Tempdir {
+    fn drop(&mut self) {
+        if self.delete {
+            if let Err(e) = std::fs::remove_dir_all(&self.path) {
+                log::warn!("failed to delete temporary directory: {}", e);
+            }
+        }
+    }
+}
+impl std::ops::Deref for Tempdir {
+    type Target = std::path::Path;
+
+    fn deref(&self) -> &Self::Target {
+        &self.path
+    }
 }
