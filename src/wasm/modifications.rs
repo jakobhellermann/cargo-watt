@@ -89,7 +89,9 @@ pub fn cargo_toml(input: &str) -> Result<String, anyhow::Error> {
     manifest["lib"]["proc-macro"] = value(false);
 
     let mut cdylib = toml_edit::Array::default();
-    cdylib.push("cdylib");
+    cdylib
+        .push("cdylib")
+        .map_err(|e| anyhow::anyhow!("crate-type array contains non-string type: {}", e))?;
     manifest["lib"]["crate-type"] = value(cdylib);
 
     let release_profile = implicit_table(&mut manifest, "profile", "release");

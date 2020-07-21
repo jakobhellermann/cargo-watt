@@ -1,6 +1,6 @@
 [package]
 name = "cargo-watt"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Jakob Hellermann <jakob.hellermann@protonmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -20,7 +20,7 @@ syn = "1.0"
 quote = "1.0"
 proc-macro2 = "1.0"
 
-toml_edit = "0.1"
+toml_edit = "0.2"
 serde_json = "1.0"
 
 walkdir = "2.3"
@@ -30,7 +30,7 @@ ureq = { version = "1.0", default-features = false, features = ["tls"], optional
 
 flate2 = { version = "1.0", optional = true }
 tar = { version = "0.4", default-features = false, optional = true }
-miniz_oxide = "0.3"
+miniz_oxide = "0.4"
 
 [features]
 default = ["crates"]
