@@ -38,7 +38,7 @@ pub fn build(
     Ok(())
 }
 
-// Replaces the [dependency] section with a `watt = "0.3"` dependency
+// Replaces the [dependency] section with a `watt = "0.4"` dependency
 fn modify_cargo_toml_for_watt(manifest: &mut toml_edit::Document, compress: bool) {
     // if the crate depends on proc-macro-hack, we wanna use it aswell
     let proc_macro_hack = manifest["dependencies"]["proc-macro-hack"].clone();
@@ -46,7 +46,7 @@ fn modify_cargo_toml_for_watt(manifest: &mut toml_edit::Document, compress: bool
     manifest.as_table_mut().remove("dependencies");
 
     let mut deps = toml_edit::Table::default();
-    deps["watt"] = toml_edit::value("0.3");
+    deps["watt"] = toml_edit::value("0.4");
     deps["proc-macro-hack"] = proc_macro_hack;
 
     if compress {
