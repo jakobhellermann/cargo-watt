@@ -12,6 +12,14 @@ Its purposes are
 
 A list of some popular procedural macros compiled with `cargo watt` is available [here](https://github.com/jakobhellermann/watt-contrib).
 
+# Prerequisites
+
+To use `cargo watt` you will need to install rustc's wasm32 toolchain:
+```sh
+$ rustup target add wasm32-unknown-unknown
+```
+Also, for optimizing the size of the `wasm`-file, wasm-strip ([wabt](https://github.com/WebAssembly/wabt)) and wasm-opt ([binaryen](https://github.com/WebAssembly/binaryen)) will be used. To opt out, use `--no-wasm-opt` or `--no-wasm-strip`.
+
 # Building proc-macro crates (`cargo watt build`)
 
 Building works by first copying a crate (either from a local directory, a git repository or crates.io) into `/tmp`.
@@ -20,7 +28,7 @@ Next, all procedural macros in it are being replaced with `pub #[no_mange] exter
 
 At this point, simple crates already compile, but there is more to be done to support a wider range of crates. Since we just change some signatures and hope for the best, sometimes stuff stops working. To 'fix' that (altough it's more of a hack), we do the following:
 
-- replace `syn` with [this syn patch](https://github.com/jakobhellermann/syn-watt), which basically has all instances of `proc_macro` replaced with `proc_macro2` and the conditional compilation for `wasm32-unknown-unknown` is removed
+- replace `syn` with [this syn patch](https://github.com/jakobhellermann/syn-watt), which basically has all instances of `proc_macro` replaced with `proc_macro2` (see [here](https://github.com/jakobhellermann/syn-watt/blob/master/tweak_syn.sh)) and the conditional compilation for `wasm32-unknown-unknown` is removed
 - do a literal search and replace of `proc_macro` to `proc_macro2`. This may sound stupid, but in my testing this works alright.
 
 Of course, some crates still don't compile, in that case you need tweak things yourself.

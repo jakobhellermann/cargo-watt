@@ -52,9 +52,9 @@ fn dump_replace(directory: &Path) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn git_dependency(dep: &str) -> InlineTable {
+fn dependency(kind: &str, dep: &str) -> InlineTable {
     let mut table = InlineTable::default();
-    table.get_or_insert("git", dep);
+    table.get_or_insert(kind, dep);
     table
 }
 
@@ -77,9 +77,9 @@ fn implicit_table<'a>(manifest: &'a mut toml_edit::Document, a: &str, b: &str) -
         .unwrap()
 }
 
-const PATCHES: &[(&str, &str)] = &[
-    ("proc-macro2", "https://github.com/dtolnay/watt"),
-    ("syn", "https://github.com/jakobhellermann/syn-watt"),
+const PATCHES: &[(&str, &str, &str)] = &[
+    ("git", "proc-macro2", "https://github.com/dtolnay/watt"),
+    ("git", "syn", "https://github.com/jakobhellermann/syn"),
 ];
 
 /// changes `proc-macro = true` to `crate-type = ["cdylib"]`
@@ -100,8 +100,8 @@ pub fn cargo_toml(input: &str) -> Result<String, anyhow::Error> {
     manifest["dependencies"]["proc-macro2"].or_insert(value("1.0"));
 
     let patch = implicit_table(&mut manifest, "patch", "crates-io");
-    for (patched_crate, dep) in PATCHES {
-        patch[patched_crate] = value(git_dependency(dep));
+    for (kind, patched_crate, dep) in PATCHES {
+        patch[patched_crate] = value(dependency(kind, dep));
     }
 
     Ok(manifest.to_string_in_original_order())
