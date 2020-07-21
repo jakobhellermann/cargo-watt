@@ -64,6 +64,10 @@ Some proc-macro crates need to export other things then the actual macros, so th
 
 This is why for example `cargo watt --crate thiserror` will tell you that thiserror is not a proc macro crate. Instead, what you need to do is run `cargo watt --crate thiserror-impl` and `[patch]` `thiserror-impl` to your generated crate.
 
+Also, if the syn version specified in the `Cargo.lock` file is newer than [my patched version](https://github.com/jakobhellermann/syn-watt), that will result in a compilation error.
+In most cases updating is as easy as rebasing the fork on upstream, but there should be some kind of automation for that which there isn't so far.
+
+
 # Verifying compilation (`cargo watt verify`)
 
 The isolation properties of running the macro inside web assembly ensure that it doesn't have unwanted access to files or the network, but the code it generates can still be mailcious.
