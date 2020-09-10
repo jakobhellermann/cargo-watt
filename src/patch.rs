@@ -1,6 +1,7 @@
 use crate::CompilationOptions;
 use anyhow::Context;
 use cargo_metadata::{CargoOpt, MetadataCommand, Package};
+use rayon::prelude::*;
 use std::path::Path;
 
 const WATT_DIR: &str = ".watt-patched";
@@ -38,7 +39,7 @@ pub fn patch(path: &Path, compilation_options: &CompilationOptions) -> Result<()
 
     let patched_deps: Vec<&str> = metadata
         .packages
-        .iter()
+        .par_iter()
         .filter(|package| is_proc_macro(package))
         .map(|package: &Package| -> Result<_, anyhow::Error> {
             let crate_path = watt_crate_dir.join(&package.name);

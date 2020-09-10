@@ -33,6 +33,7 @@ ureq = { version = "1.4", default-features = false, features = ["tls"], optional
 flate2 = { version = "1.0", optional = true }
 tar = { version = "0.4", default-features = false, optional = true }
 miniz_oxide = "0.4"
+rayon = "1.4"
 
 [features]
 default = ["crates"]
