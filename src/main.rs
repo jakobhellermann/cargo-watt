@@ -1,7 +1,9 @@
 mod utils;
+mod utils_toml;
 mod wasm;
 
 mod build;
+mod patch;
 mod verify;
 
 use anyhow::Context;
@@ -20,6 +22,15 @@ pub struct Input {
     #[cfg_attr(not(feature = "crates"), clap(hidden = true))]
     #[clap(long = "crate", conflicts_with = "path", conflicts_with = "git")]
     crate_: Option<String>,
+}
+impl Input {
+    pub fn crate_(crate_: String) -> Self {
+        Self {
+            crate_: Some(crate_),
+            path: PathBuf::default(),
+            git: None,
+        }
+    }
 }
 
 #[derive(Clap, Debug)]
@@ -80,12 +91,20 @@ pub enum Options {
         #[clap(flatten)]
         compilation_options: CompilationOptions,
     },
+    Patch {
+        #[clap(default_value = ".")]
+        path: PathBuf,
+
+        #[clap(flatten)]
+        compilation_options: CompilationOptions,
+    },
 }
 impl Options {
     fn input(&self) -> &Input {
         match self {
             Options::Build { input, .. } => input,
             Options::Verify { input, .. } => input,
+            Options::Patch { .. } => panic!("no input in patch subcommand"),
         }
     }
     fn compilation_options(&self) -> &CompilationOptions {
@@ -98,12 +117,16 @@ impl Options {
                 compilation_options,
                 ..
             } => compilation_options,
+            Options::Patch {
+                compilation_options,
+                ..
+            } => compilation_options,
         }
     }
     fn keep_tmp(&self) -> bool {
         match self {
             Options::Build { keep_tmp, .. } => *keep_tmp,
-            Options::Verify { .. } => false,
+            _ => false,
         }
     }
 }
@@ -151,6 +174,14 @@ impl Input {
 fn run(options: Options) -> Result<(), anyhow::Error> {
     options.compilation_options().verify()?;
 
+    if let Options::Patch {
+        path,
+        compilation_options,
+    } = options
+    {
+        return patch::patch(&path, &compilation_options);
+    }
+
     // copy crate (local directory, crates.io, git) into /tmp/cargo-watt-crate
     let mut tempdir = options.input().in_tempdir()?;
 
@@ -168,6 +199,7 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
             ..
         } => build::build(
             &tempdir,
+            None,
             &compilation_options,
             only_copy_essential,
             overwrite,
@@ -177,5 +209,6 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
             compilation_options,
             ..
         } => verify::verify(&tempdir, &compilation_options, &file),
+        Options::Patch { .. } => unreachable!(),
     }
 }

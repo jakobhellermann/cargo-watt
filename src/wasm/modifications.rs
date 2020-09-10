@@ -1,5 +1,5 @@
 use std::path::Path;
-use toml_edit::{value, Document, InlineTable, Item, Table};
+use toml_edit::{value, Document};
 
 pub fn make_modifications(path: &Path) -> Result<Vec<ProcMacroFn>, anyhow::Error> {
     let toml_path = path.join("Cargo.toml");
@@ -52,31 +52,6 @@ fn dump_replace(directory: &Path) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn dependency(kind: &str, dep: &str) -> InlineTable {
-    let mut table = InlineTable::default();
-    table.get_or_insert(kind, dep);
-    table
-}
-
-// returns the (possibly just generated) [patch.crates.io] section
-fn implicit_table<'a>(manifest: &'a mut toml_edit::Document, a: &str, b: &str) -> &'a mut Table {
-    let mut a_table = Table::new();
-    a_table.set_implicit(true);
-
-    let patch = manifest[a]
-        .or_insert(Item::Table(a_table))
-        .as_table_mut()
-        .unwrap();
-
-    let mut b_table = Table::new();
-    b_table.set_implicit(true);
-
-    patch[b]
-        .or_insert(Item::Table(b_table))
-        .as_table_mut()
-        .unwrap()
-}
-
 const PATCHES: &[(&str, &str, &str)] = &[
     ("git", "proc-macro2", "https://github.com/dtolnay/watt"),
     ("git", "syn", "https://github.com/jakobhellermann/syn"),
@@ -94,16 +69,16 @@ pub fn cargo_toml(input: &str) -> Result<String, anyhow::Error> {
         .map_err(|e| anyhow::anyhow!("crate-type array contains non-string type: {}", e))?;
     manifest["lib"]["crate-type"] = value(cdylib);
 
-    let release_profile = implicit_table(&mut manifest, "profile", "release");
+    let release_profile = crate::utils_toml::implicit_table(&mut manifest, "profile", "release");
     release_profile["codegen-units"] = value(1);
     release_profile["opt-level"] = value("s");
 
     // ensure dependencies contain proc_macro so that we can patch it
     manifest["dependencies"]["proc-macro2"].or_insert(value("1.0"));
 
-    let patch = implicit_table(&mut manifest, "patch", "crates-io");
+    let patch = crate::utils_toml::implicit_table(&mut manifest, "patch", "crates-io");
     for (kind, patched_crate, dep) in PATCHES {
-        patch[patched_crate] = value(dependency(kind, dep));
+        patch[patched_crate] = toml_edit::value(crate::utils_toml::dependency(kind, dep));
     }
 
     Ok(manifest.to_string_in_original_order())

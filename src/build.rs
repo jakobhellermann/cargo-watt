@@ -7,13 +7,16 @@ use std::path::{Path, PathBuf};
 
 pub fn build(
     directory: &Path,
+    out_dir: Option<PathBuf>,
     compilation_options: &CompilationOptions,
     only_copy_essential: bool,
     overwrite: bool,
 ) -> Result<(), anyhow::Error> {
     let manifest = utils::parse_validate_toml(&directory.join("Cargo.toml"))?;
     let name = manifest["package"]["name"].as_str().unwrap().to_string();
-    let crate_path = PathBuf::from(format!("{}-watt", name));
+
+    let crate_path = out_dir.unwrap_or_else(|| PathBuf::from(format!("{}-watt", name)));
+
     match (crate_path.exists(), overwrite) {
         (true, false) => anyhow::bail!(
             "'{}' already exists. Use --overwrite to overwrite.",

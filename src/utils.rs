@@ -84,17 +84,21 @@ pub fn clone_git_into(path: &Path, url: &str) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-pub fn cargo_fmt(path: &Path) -> Result<(), anyhow::Error> {
+pub fn cargo(path: &Path, args: &[&str]) -> Result<(), anyhow::Error> {
     let output = Command::new("cargo")
-        .arg("fmt")
+        .args(args)
         .current_dir(path)
         .output()
-        .context("cannot execute git")?;
+        .context("cannot execute cargo")?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!("{}", stderr);
     }
     Ok(())
+}
+
+pub fn cargo_fmt(path: &Path) -> Result<(), anyhow::Error> {
+    cargo(path, &["fmt"])
 }
 
 #[cfg(feature = "crates")]
