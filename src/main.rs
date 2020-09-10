@@ -121,10 +121,38 @@ fn main() {
     }
 }
 
+impl Input {
+    fn in_tempdir(&self) -> Result<utils::Tempdir, anyhow::Error> {
+        let directory = utils::Tempdir::new().context("failed to crate temporary directory")?;
+
+        if let Some(git) = &self.git {
+            log::info!("git clone '{}' into temporary directory...", &git);
+            utils::clone_git_into(&directory, git)?;
+        } else if let Some(crate_) = &self.crate_ {
+            log::info!("download crate '{}' into temporary directory...", crate_);
+            #[cfg(feature = "crates")]
+            utils::download_crate(&directory, crate_)
+                .context("failed to download and extract crate")?;
+            #[cfg(not(feature = "crates"))]
+            panic!("the crate was compiled without the 'crates' feature flag");
+        } else {
+            let cargo_toml = self.path.join("Cargo.toml");
+            anyhow::ensure!(
+            cargo_toml.exists(),
+            "No Cargo.toml found. Use the --git or --crate flag if you want to use a remote crate."
+        );
+            utils::copy_all(&self.path, &directory).context("failed to copy to tmp dir")?;
+        }
+
+        Ok(directory)
+    }
+}
+
 fn run(options: Options) -> Result<(), anyhow::Error> {
     options.compilation_options().verify()?;
 
-    let mut tempdir = utils::Tempdir::new().context("failed to crate temporary directory")?;
+    // copy crate (local directory, crates.io, git) into /tmp/cargo-watt-crate
+    let mut tempdir = options.input().in_tempdir()?;
 
     // if we want to keep the directory, we probably wanna know where it is
     if options.keep_tmp() {
@@ -132,27 +160,7 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
         log::info!("generate temporary directory at '{}'", tempdir.display());
     }
 
-    // copy crate (local directory, crates.io, git) into /tmp/cargo-watt-crate
-    let input = options.input();
-    if let Some(git) = &input.git {
-        log::info!("git clone '{}' into temporary directory...", &git);
-        utils::clone_git_into(&tempdir, git)?;
-    } else if let Some(crate_) = &input.crate_ {
-        log::info!("download crate '{}' into temporary directory...", crate_);
-        #[cfg(feature = "crates")]
-        utils::download_crate(&tempdir, crate_).context("failed to download and extract crate")?;
-        #[cfg(not(feature = "crates"))]
-        panic!("the crate was compiled without the 'crates' feature flag");
-    } else {
-        let cargo_toml = input.path.join("Cargo.toml");
-        anyhow::ensure!(
-            cargo_toml.exists(),
-            "No Cargo.toml found. Use the --git or --crate flag if you want to use a remote crate."
-        );
-        utils::copy_all(&input.path, &tempdir).context("failed to copy to tmp dir")?;
-    }
-
-    let result = match options {
+    match options {
         Options::Build {
             only_copy_essential,
             overwrite,
@@ -169,7 +177,5 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
             compilation_options,
             ..
         } => verify::verify(&tempdir, &compilation_options, &file),
-    };
-
-    result
+    }
 }
