@@ -73,6 +73,9 @@ pub enum Options {
         #[clap(flatten)]
         compilation_options: CompilationOptions,
 
+        #[clap(short = "o")]
+        out_dir: Option<PathBuf>,
+
         #[clap(long, about = "copy only Cargo.toml and src/* to new crate")]
         only_copy_essential: bool,
         #[clap(long)]
@@ -196,10 +199,11 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
             only_copy_essential,
             overwrite,
             compilation_options,
+            out_dir,
             ..
         } => build::build(
             &tempdir,
-            None,
+            out_dir,
             &compilation_options,
             only_copy_essential,
             overwrite,
