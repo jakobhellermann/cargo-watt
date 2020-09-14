@@ -137,12 +137,18 @@ pub fn download_crate(path: &Path, crate_: &str) -> Result<(), anyhow::Error> {
 
     let tar = flate2::read::GzDecoder::new(crate_response.into_reader());
     let mut archive = tar::Archive::new(tar);
-    archive.unpack(path)?;
 
-    for file in std::fs::read_dir(path)? {
-        let inner_path = file?.path();
-        copy_all(&inner_path, path)?;
-        std::fs::remove_dir_all(&inner_path)?;
+    for entry in archive.entries()? {
+        let mut entry = entry?;
+
+        let path_without_parent: PathBuf = entry.path()?.components().skip(1).collect();
+        let new_path = path.join(path_without_parent);
+
+        if let Some(parent) = new_path.parent() {
+            std::fs::create_dir_all(&parent)?;
+        }
+
+        entry.unpack(new_path)?;
     }
 
     Ok(())
