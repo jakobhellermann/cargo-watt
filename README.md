@@ -24,7 +24,7 @@ Also, for optimizing the size of the `wasm`-file, wasm-strip ([wabt](https://git
 
 Building works by first copying a crate (either from a local directory, a git repository or crates.io) into `/tmp`.
 The crate type is then changed to `cdylib`, `proc-macro2` is being patched to dtolnay's `proc_macro2`.
-Next, all procedural macros in it are being replaced with `pub #[no_mange] extern "C"` fns and `proc_macro` is replaced with `proc_macro2`, see [this](https://github.com/dtolnay/watt#getting-started).
+Next, all procedural macros in it are being replaced with `pub #[no_mangle] extern "C"` fns and `proc_macro` is replaced with `proc_macro2`, see [this](https://github.com/dtolnay/watt#getting-started).
 
 At this point, simple crates already compile, but there is more to be done to support a wider range of crates. Since we just change some signatures and hope for the best, sometimes stuff stops working. To 'fix' that (altough it's more of a hack), we do the following:
 
