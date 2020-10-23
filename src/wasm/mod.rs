@@ -26,6 +26,7 @@ pub fn compile(
     directory: &Path,
     manifest: &toml_edit::Document,
     compilation_options: &CompilationOptions,
+    verbose: bool,
 ) -> Result<(Vec<ProcMacroFn>, Vec<u8>), anyhow::Error> {
     let name = manifest["package"]["name"].as_str().unwrap();
 
@@ -34,7 +35,8 @@ pub fn compile(
 
     log::info!("begin compiling crate...");
     let instant = std::time::Instant::now();
-    let status = Command::new("cargo")
+    let mut command = Command::new("cargo");
+    command
         .args(&[
             "build",
             "--target",
@@ -43,9 +45,14 @@ pub fn compile(
             "--all-features",
         ])
         .env("RUSTFLAGS", rust_flags())
-        .current_dir(&directory)
-        .status()
-        .context("failed to run cargo build")?;
+        .current_dir(&directory);
+
+    if !verbose {
+        command.stderr(std::process::Stdio::null());
+        command.stdout(std::process::Stdio::null());
+    }
+
+    let status = command.status().context("failed to run cargo build")?;
     log::info!("finished in {:.1}s", instant.elapsed().as_secs_f32());
     anyhow::ensure!(status.success(), "cargo failed");
 

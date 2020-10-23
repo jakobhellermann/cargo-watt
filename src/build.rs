@@ -11,6 +11,7 @@ pub fn build(
     compilation_options: &CompilationOptions,
     only_copy_essential: bool,
     overwrite: bool,
+    verbose: bool,
 ) -> Result<(), anyhow::Error> {
     let manifest = utils::parse_validate_toml(&directory.join("Cargo.toml"))?;
     let name = manifest["package"]["name"].as_str().unwrap().to_string();
@@ -26,7 +27,7 @@ pub fn build(
         (false, _) => {}
     }
 
-    let (fns, wasm) = wasm::compile(directory, &manifest, compilation_options)?;
+    let (fns, wasm) = wasm::compile(directory, &manifest, compilation_options, verbose)?;
 
     create_watt_crate(
         manifest,

@@ -207,6 +207,7 @@ fn run(options: Options) -> Result<(), anyhow::Error> {
             &compilation_options,
             only_copy_essential,
             overwrite,
+            false,
         ),
         Options::Verify {
             file,

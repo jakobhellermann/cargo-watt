@@ -53,6 +53,7 @@ pub fn patch(path: &Path, compilation_options: &CompilationOptions) -> Result<()
                 &compilation_options,
                 true,
                 true,
+                false,
             )
             .with_context(|| format!("failed to build crate {}", package.name))?;
 

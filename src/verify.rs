@@ -13,7 +13,7 @@ pub fn verify(
 
     let manifest = utils::parse_validate_toml(&directory.join("Cargo.toml"))?;
     let name = manifest["package"]["name"].as_str().unwrap();
-    let (_, compiled_wasm) = wasm::compile(directory, &manifest, compilation_options)?;
+    let (_, compiled_wasm) = wasm::compile(directory, &manifest, compilation_options, true)?;
 
     if wasm != compiled_wasm {
         let file_name = wasm_file.file_name().unwrap().to_str().unwrap();
